@@ -75,6 +75,10 @@ from models import db, User, Complaint, VelocityEntry, PendingReview
 db.init_app(app)
 migrate = Migrate(app, db)
 
+with app.app_context():
+    db.create_all()
+
+
 # ─────────────────────────────────────────────
 # GOOGLE OAUTH
 # ─────────────────────────────────────────────
@@ -1044,8 +1048,6 @@ def delete_complaint(complaint_id):
 
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()          # Create tables if they don't exist
     print("\n" + "="*55)
     print("  CyberShield v4.0 — Database-backed")
     print("  Velocity Tracker + Heatmap + NCRP PDF + History")
