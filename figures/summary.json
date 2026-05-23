@@ -1,0 +1,49 @@
+{
+  "Dataset": {
+    "Total samples": 26534,
+    "Fraud samples": 12852,
+    "Legit samples": 13682,
+    "Fraud ratio": "0.4844",
+    "Train size": 18573,
+    "Validation size": 3980,
+    "Test size": 3980
+  },
+  "Vectorization": {
+    "Total features": 25000,
+    "Word n-gram features": 20000,
+    "Char n-gram features": 5000
+  },
+  "Ensemble": {
+    "LR weight": 0.2,
+    "SVM weight": 0.5,
+    "NB weight": 0.3,
+    "Validation Macro F1": "0.9426"
+  },
+  "Hard Negative Mining": {
+    "Hard examples mined": 228,
+    "False positives mined": 93,
+    "False negatives mined": 135,
+    "Duplication factor": 1
+  },
+  "Test Set Performance (Pre-HNM)": {
+    "Accuracy": "0.9482",
+    "Precision": "0.9508",
+    "Recall": "0.9419",
+    "Macro F1": "0.9482",
+    "ROC-AUC": "0.9893"
+  },
+  "Test Set Performance (Post-HNM)": {
+    "Accuracy": "0.9485",
+    "Precision": "0.9494",
+    "Recall": "0.9440",
+    "Macro F1": "0.9484",
+    "ROC-AUC": "0.9899"
+  },
+  "Cross-Validation": {
+    "CV Macro F1 mean": "0.9348",
+    "CV Macro F1 std": "0.0034"
+  },
+  "Calibration": {
+    "Ensemble ECE": "0.0191"
+  }
+}

@@ -1,24 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Admin Panel — CyberShield Portal{% endblock %}
-{% block description %}CyberShield admin panel for Human-in-the-Loop fraud detection. Label uncertain cases and retrain the ML model.{% endblock %}
+{% block description %}CyberShield admin panel for Human-in-the-Loop fraud detection. Label uncertain cases and retrain
+the ML model.{% endblock %}
 
 {% block content %}
 <div class="admin-main">
 
   {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}
-      <div class="flash flash-{{ cat }}">{{ msg }}</div>
-    {% endfor %}
+  {% for cat, msg in messages %}
+  <div class="flash flash-{{ cat }}">{{ msg }}</div>
+  {% endfor %}
   {% endwith %}
 
   <div style="margin-bottom:1.5rem;">
-    <h1 style="font-size:1.6rem;margin-bottom:0.2rem;"><i class="fa-solid fa-gear" style="color:var(--primary);"></i> CyberShield Admin</h1>
-    <p style="color:var(--text-muted);font-size:0.85rem;">Human-in-the-Loop · Velocity Intelligence · Retrain Control · {{ user.email }}</p>
+    <h1 style="font-size:1.6rem;margin-bottom:0.2rem;"><i class="fa-solid fa-gear" style="color:var(--primary);"></i>
+      CyberShield Admin</h1>
+    <p style="color:var(--text-muted);font-size:0.85rem;">Human-in-the-Loop · Velocity Intelligence · Retrain Control ·
+      {{ user.email }}</p>
   </div>
 
   <!-- ── STATS GRID ── -->
-  {% set total     = pending | length %}
-  {% set labeled   = pending | selectattr('admin_label') | list | length %}
+  {% set total = pending | length %}
+  {% set labeled = pending | selectattr('admin_label') | list | length %}
   {% set unlabeled = total - labeled %}
   <div class="stats-grid">
     <div class="stat-card">
@@ -53,54 +56,56 @@
   <div class="admin-card">
     <div class="admin-card-head">
       <span><i class="fa-solid fa-rotate"></i>&nbsp; Velocity Tracker — Threat Intelligence Database</span>
-      <span style="font-size:0.78rem;font-weight:400;color:var(--text-muted);">{{ vstats.total_phones }} phones · {{ vstats.total_urls }} URLs tracked</span>
+      <span style="font-size:0.78rem;font-weight:400;color:var(--text-muted);">{{ vstats.total_phones }} phones · {{
+        vstats.total_urls }} URLs tracked</span>
     </div>
     <div class="vel-grid">
       <div class="vel-col">
         <h4>📞 Top Reported Phone Numbers</h4>
         {% if vstats.top_phones %}
-          {% for phone, entry in vstats.top_phones %}
-          <div class="vel-row">
-            <div>
-              <div class="vel-val">{{ phone }}</div>
-              <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Last: {{ entry.last_seen[:10] }}</div>
-            </div>
-            <div style="text-align:right;">
-              <div class="vel-count">{{ entry.count }}×</div>
-              {% if entry.count >= 4 %}<span class="threat-pill tp-CRITICAL">CRITICAL</span>
-              {% elif entry.count >= 3 %}<span class="threat-pill tp-HIGH">HIGH</span>
-              {% elif entry.count >= 2 %}<span class="threat-pill tp-MEDIUM">MEDIUM</span>{% endif %}
-            </div>
+        {% for phone, entry in vstats.top_phones %}
+        <div class="vel-row">
+          <div>
+            <div class="vel-val">{{ phone }}</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Last: {{ entry.last_seen[:10] }}</div>
           </div>
-          {% endfor %}
+          <div style="text-align:right;">
+            <div class="vel-count">{{ entry.count }}×</div>
+            {% if entry.count >= 4 %}<span class="threat-pill tp-CRITICAL">CRITICAL</span>
+            {% elif entry.count >= 3 %}<span class="threat-pill tp-HIGH">HIGH</span>
+            {% elif entry.count >= 2 %}<span class="threat-pill tp-MEDIUM">MEDIUM</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
         {% else %}
-          <div style="color:var(--text-muted);font-size:0.82rem;padding:10px 0;">No phone data yet.</div>
+        <div style="color:var(--text-muted);font-size:0.82rem;padding:10px 0;">No phone data yet.</div>
         {% endif %}
       </div>
       <div class="vel-col">
         <h4>🔗 Top Reported URLs</h4>
         {% if vstats.top_urls %}
-          {% for url, entry in vstats.top_urls %}
-          <div class="vel-row">
-            <div>
-              <div class="vel-val" title="{{ url }}">{{ url[:40] }}{% if url|length > 40 %}…{% endif %}</div>
-              <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Last: {{ entry.last_seen[:10] }}</div>
-            </div>
-            <div style="text-align:right;">
-              <div class="vel-count">{{ entry.count }}×</div>
-              {% if entry.count >= 4 %}<span class="threat-pill tp-CRITICAL">CRITICAL</span>
-              {% elif entry.count >= 3 %}<span class="threat-pill tp-HIGH">HIGH</span>
-              {% elif entry.count >= 2 %}<span class="threat-pill tp-MEDIUM">MEDIUM</span>{% endif %}
-            </div>
+        {% for url, entry in vstats.top_urls %}
+        <div class="vel-row">
+          <div>
+            <div class="vel-val" title="{{ url }}">{{ url[:40] }}{% if url|length > 40 %}…{% endif %}</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:2px;">Last: {{ entry.last_seen[:10] }}</div>
           </div>
-          {% endfor %}
+          <div style="text-align:right;">
+            <div class="vel-count">{{ entry.count }}×</div>
+            {% if entry.count >= 4 %}<span class="threat-pill tp-CRITICAL">CRITICAL</span>
+            {% elif entry.count >= 3 %}<span class="threat-pill tp-HIGH">HIGH</span>
+            {% elif entry.count >= 2 %}<span class="threat-pill tp-MEDIUM">MEDIUM</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
         {% else %}
-          <div style="color:var(--text-muted);font-size:0.82rem;padding:10px 0;">No URL data yet.</div>
+        <div style="color:var(--text-muted);font-size:0.82rem;padding:10px 0;">No URL data yet.</div>
         {% endif %}
       </div>
     </div>
     <p style="font-size:0.74rem;color:var(--text-muted);padding:0 1.5rem 1rem;">
-      Full database: <a href="/admin/velocity-db" target="_blank" style="color:var(--primary);">GET /admin/velocity-db</a>
+      Full database: <a href="/admin/velocity-db" target="_blank" style="color:var(--primary);">GET
+        /admin/velocity-db</a>
     </p>
   </div>
   {% endif %}
@@ -109,15 +114,31 @@
   <div class="retrain-card">
     <div class="retrain-header">
       <div>
-        <div class="retrain-title"><i class="fa-solid fa-arrows-rotate" style="color:var(--primary);"></i> Retrain Model</div>
+        <div class="retrain-title"><i class="fa-solid fa-arrows-rotate" style="color:var(--primary);"></i> Retrain Model
+        </div>
         <div class="retrain-sub">Runs pipefinal.py with all labeled samples. ~2–5 minutes.</div>
       </div>
-      <form method="POST" action="/admin/retrain"
-            onsubmit="document.getElementById('rbtn').textContent='🔄 Starting…'">
-        <button class="btn-retrain" id="rbtn" type="submit">
-          <i class="fa-solid fa-rocket"></i> Retrain Now
-        </button>
-      </form>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+
+        <form method="POST" action="/admin/retrain"
+          onsubmit="document.getElementById('rbtn').textContent='🔄 Starting…'">
+          <button class="btn-retrain" id="rbtn" type="submit">
+            🚀 Retrain Now
+          </button>
+        </form>
+
+        <form method="POST" action="/admin/reload-model" id="reloadForm">
+          <button class="btn-retrain" style="background:linear-gradient(135deg,#1A7A35,#27AE60);" type="button"
+            onclick="showReloadModal()">
+            ⚡ Reload Model
+          </button>
+        </form>
+
+      </div>
+      <p style="font-size:0.76rem;color:#AAB;margin-top:8px;">
+        Step 1 → Click <b>Retrain Now</b> and wait for log to show completion.<br>
+        Step 2 → Click <b>Reload Model</b> to apply new weights without restarting server.
+      </p>
     </div>
     <button class="btn-log" onclick="toggleLog()">📜 Show Retrain Log</button>
     <div class="log-box" id="logBox">Fetching…</div>
@@ -134,8 +155,12 @@
       <table class="admin-table">
         <thead>
           <tr>
-            <th>ID</th><th>Time</th><th>Message</th>
-            <th>Fraud Prob</th><th>Status</th><th>Action</th>
+            <th>ID</th>
+            <th>Time</th>
+            <th>Message</th>
+            <th>Fraud Prob</th>
+            <th>Status</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -158,9 +183,10 @@
             </td>
             <td>
               {% if item.admin_label %}
-                <span class="status-labeled">✅ {{ item.admin_label | upper }}<br>
-                  <span style="font-weight:400;font-size:0.73rem;color:var(--text-muted);">{{ item.labeled_by.split('@')[0] }}</span>
-                </span>
+              <span class="status-labeled">✅ {{ item.admin_label | upper }}<br>
+                <span style="font-weight:400;font-size:0.73rem;color:var(--text-muted);">{{
+                  item.labeled_by.split('@')[0] }}</span>
+              </span>
               {% else %}<span class="status-unlabeled">⏳ Pending</span>{% endif %}
             </td>
             <td>
@@ -188,26 +214,91 @@
 
 </div>
 
+<!-- ── RELOAD CONFIRM MODAL ── -->
+<div id="reloadModal" style="
+  display:none; position:fixed; inset:0; z-index:9999;
+  background:rgba(0,0,0,0.65); backdrop-filter:blur(6px);
+  align-items:center; justify-content:center;">
+  <div style="
+    background:linear-gradient(135deg,#0f1724,#1a2540);
+    border:1px solid rgba(139,92,246,0.35);
+    border-radius:16px; padding:2rem 2.2rem;
+    max-width:420px; width:90%; box-shadow:0 25px 60px rgba(0,0,0,0.5);
+    animation:modalIn .2s ease;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;">
+      <div style="
+        width:42px;height:42px;border-radius:10px;
+        background:linear-gradient(135deg,#1A7A35,#27AE60);
+        display:flex;align-items:center;justify-content:center;font-size:1.2rem;">⚡</div>
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:#e2e8f0;">Reload Model</div>
+        <div style="font-size:0.75rem;color:#7c8fa6;">Apply retrained weights to live server</div>
+      </div>
+    </div>
+    <p style="font-size:0.85rem;color:#94a3b8;line-height:1.6;margin-bottom:1.5rem;">
+      This will load <code style="color:#a78bfa;background:rgba(139,92,246,0.1);padding:1px 5px;border-radius:4px;">final_models.pkl</code>
+      and <code style="color:#a78bfa;background:rgba(139,92,246,0.1);padding:1px 5px;border-radius:4px;">final_vectorizer.pkl</code>
+      from disk into memory.<br><br>
+      <strong style="color:#fcd34d;">⚠ Only do this after retrain completes successfully.</strong>
+    </p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="hideReloadModal()" style="
+        padding:0.5rem 1.2rem;border-radius:8px;
+        border:1px solid rgba(255,255,255,0.12);
+        background:rgba(255,255,255,0.05);color:#94a3b8;
+        font-size:0.85rem;cursor:pointer;transition:all .2s;"
+        onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+        onmouseout="this.style.background='rgba(255,255,255,0.05)'">Cancel</button>
+      <button onclick="document.getElementById('reloadForm').submit()" style="
+        padding:0.5rem 1.4rem;border-radius:8px;border:none;
+        background:linear-gradient(135deg,#1A7A35,#27AE60);color:#fff;
+        font-size:0.85rem;font-weight:600;cursor:pointer;transition:all .2s;"
+        onmouseover="this.style.opacity='.9'"
+        onmouseout="this.style.opacity='1'">⚡ Confirm Reload</button>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes modalIn {
+  from { opacity:0; transform:scale(.95) translateY(-10px); }
+  to   { opacity:1; transform:scale(1)  translateY(0); }
+}
+</style>
+
 <script>
-function toggleMsg(el) {
-  const full = el.nextElementSibling;
-  const open = full.style.display === 'block';
-  full.style.display = open ? 'none' : 'block';
-  el.textContent = open ? '▼ expand' : '▲ collapse';
-}
-let logVisible = false;
-function toggleLog() {
-  const box = document.getElementById('logBox');
-  logVisible = !logVisible;
-  box.style.display = logVisible ? 'block' : 'none';
-  if (logVisible) fetchLog();
-}
-function fetchLog() {
-  fetch('/admin/retrain-status').then(r=>r.json()).then(d=>{
-    const b = document.getElementById('logBox');
-    b.textContent = d.log; b.scrollTop = b.scrollHeight;
-  }).catch(()=>{});
-}
-setInterval(()=>{ if(logVisible) fetchLog(); }, 4000);
+  function toggleMsg(el) {
+    const full = el.nextElementSibling;
+    const open = full.style.display === 'block';
+    full.style.display = open ? 'none' : 'block';
+    el.textContent = open ? '▼ expand' : '▲ collapse';
+  }
+  let logVisible = false;
+  function toggleLog() {
+    const box = document.getElementById('logBox');
+    logVisible = !logVisible;
+    box.style.display = logVisible ? 'block' : 'none';
+    if (logVisible) fetchLog();
+  }
+  function fetchLog() {
+    fetch('/admin/retrain-status').then(r => r.json()).then(d => {
+      const b = document.getElementById('logBox');
+      b.textContent = d.log; b.scrollTop = b.scrollHeight;
+    }).catch(() => { });
+  }
+  setInterval(() => { if (logVisible) fetchLog(); }, 4000);
+
+  function showReloadModal() {
+    const m = document.getElementById('reloadModal');
+    m.style.display = 'flex';
+  }
+  function hideReloadModal() {
+    const m = document.getElementById('reloadModal');
+    m.style.display = 'none';
+  }
+  // Close on backdrop click
+  document.getElementById('reloadModal').addEventListener('click', function(e) {
+    if (e.target === this) hideReloadModal();
+  });
 </script>
 {% endblock %}

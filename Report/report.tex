@@ -1,0 +1,182 @@
+\documentclass[a4paper, 11pt, oneside]{report} 
+\usepackage[left=1in, right=1in, top=1in, bottom=1in]{geometry}
+\newcommand{\plogo}{\fbox{$\mathcal{PL}$}} 
+\usepackage{graphicx}
+\graphicspath{{report_file/}{../figures/}}
+\usepackage{graphics}
+\usepackage{float}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage[utf8]{inputenc} 
+\usepackage[T1]{fontenc} 
+\usepackage{fouriernc} 
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning, fit, calc, backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{graphics}
+\usepackage{longtable}
+\usepackage[nottoc]{tocbibind}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{lipsum}
+\usepackage{pgfgantt} % For Gantt charts
+\usepackage{pdflscape} % For landscape pages if Gantt chart is wide
+\usepackage{booktabs} % For better tables
+\usepackage{multirow}
+\usepackage[boxed]{algorithm}
+\usepackage{algpseudocode}
+\usepackage[none]{hyphenat}
+
+\begin{document} 	
+    \sloppy
+    \setlength{\parindent}{0em}
+    \setlength{\parskip}{0.5em}
+    
+	\begin{titlepage} 
+		
+		\centering 
+		
+		\vspace*{\baselineskip} 
+		
+		\vspace{0.75\baselineskip}
+		
+		{\LARGE \textbf{CyberShield: Uncertainty-Aware Fraud Detection with Human-in-the-Loop Calibration for Cybercrime Intelligence}}
+		
+		\vspace{0.75\baselineskip}
+		
+		\vspace{2\baselineskip}
+
+		A report submitted for the course named Project - I (CS3201)
+		
+		\vspace*{7\baselineskip}
+		
+		Submitted By
+		
+		\vspace{0.5\baselineskip}
+		
+		{\scshape\Large ABHISHEK YADAV \\ SEMESTER - VI \\ 230103041}
+		
+		\vspace{0.5\baselineskip}
+		
+		Supervised By
+		
+		\vspace{0.5\baselineskip}
+		
+		{\scshape\Large Dr. Salam Michael Singh}
+		\vspace{0.5\baselineskip}
+		
+		\vfill
+		
+		\begin{center}
+			\includegraphics[width=5cm]{report_file/iiit manipur.png}
+		\end{center}
+	
+	{\scshape\small Department of Computer Science and Engineering\\ Indian Institute of Information Technology Senapati, Manipur \\ April, 2026}
+	
+\end{titlepage}
+
+%----------------------------------------------------------------------------------------
+
+% \begin{center}
+\begin{center}
+   { \LARGE \textbf{Declaration}}
+\end{center}
+In this submission, I have expressed my idea in my own words, and I have adequately cited and referenced any ideas or words that were taken from another source. I also declare that I adhere to all principles of academic honesty and integrity and that I have not misrepresented or falsified any ideas, data, facts, or sources in this submission. If any violation of the above is made, I understand that the institute may take disciplinary action. Such a violation may also engender disciplinary action from the sources which were not properly cited or permission not taken when needed.
+
+\vspace{1cm}\hspace{8.35cm} ABHISHEK YADAV \\
+\vspace{1cm}\hspace{9cm} 230103041 \\
+
+\newpage
+
+\begin{center}
+	\thispagestyle{empty}
+		
+		\begin{table}
+			\centering
+			\includegraphics[scale=0.2]{report_file/iiit manipur.png}
+			\begin{tabular}{l}
+				Department of Computer Science and Engineering \\
+				Indian Institute of Information Technology Senapati, Manipur \\
+			\end{tabular}
+		\end{table}
+		\par\noindent\rule{\textwidth}{0.4pt}
+			\textbf{Dr. Salam Michael Singh}
+			\hspace*{\fill} Email: \href{mailto:michael_s@iiitmanipur.ac.in}{michael\_s@iiitmanipur.ac.in}\\
+			Assistant Professor
+			\hspace*{0pt}\hfill Contact No: +91 8575443081\\[2cm]
+			{\Huge \textbf{\emph{To Whom It May Concern}}}\\[2cm]
+			\linespread{1.13}
+			\large{This is to certify that the project report 
+                entitled \textbf{"CyberShield: Uncertainty-Aware Fraud Detection with Human-in-the-Loop Calibration for Cybercrime Intelligence",} submitted to the department of Computer Science and Engineering, Indian Institute of Information Technology Senapati, Manipur in partial fulfillment for the award of degree of Bachelor of Technology in Computer Science and Engineering is a bonafide record of work carried out by \textbf{ABHISHEK YADAV} bearing roll number 230103041.}\\[2.0cm]
+			\hspace*{2.6in}\large{Signature of Supervisor}\\[0.3cm]
+			\hspace*{2.5in}\textbf{(Dr. Salam Michael Singh)}\\[0.5cm]
+			
+	\end{center}
+        \vspace{0.5cm}
+	Signature of the Examiner 1 ............................\\\\
+	Signature of the Examiner 2 ............................\\\\
+	Signature of the Examiner 3 ............................\\\\
+	Signature of the Examiner 4 ............................\\\\
+	\newpage
+ 
+
+\newpage
+\addcontentsline{toc}{chapter}{Abstract}
+\begin{center}
+    { \LARGE \textbf{Abstract}}
+\end{center}
+\vspace{2cm}
+{\large
+Cybercrime via SMS, WhatsApp, and URLs represents a rapidly escalating threat necessitating robust automated detection. Conventional machine learning approaches often suffer from poor calibration and high false-positive rates. In this report, we present \textbf{CyberShield}, an uncertainty-aware fraud detection framework utilizing a calibrated ensemble model (Logistic Regression, SVM, and Naive Bayes) on high-dimensional TF-IDF vectors. The system employs confidence-bounded thresholding: highly certain malicious patterns \linebreak ($P(Fraud) \geq 0.90$) trigger automated generation of a pre-filled NCRP-compliant PDF document ready for manual portal submission, while ambiguous cases \linebreak ($0.30 \leq P(Fraud) < 0.70$) are routed to an administrator panel for Human-in-the-Loop (HITL) annotation. The model is continuously adaptable through a novel \textit{False-Positive-Driven} Hard Negative Mining strategy that selectively mines the top 15\% highest-confidence False Positives and retrains with elevated sample weights ($w=2.0$), improving precision while preserving recall. Extensive evaluation on 26,534 labeled samples demonstrates a test-set accuracy of \textbf{94.87\%} and an ROC-AUC of \textbf{0.9895}. By integrating a Velocity Intelligence tracker for malicious artifacts, CyberShield provides an end-to-end, highly reproducible approach to mitigating sociotechnical cyber-attacks.
+}
+
+\newpage
+        \begin{center}
+            { \LARGE \textbf{Acknowledgement}}
+        \end{center}
+	\vspace{2cm}
+	I would like to express my deepest appreciation to all those who provided me the possibility to complete this project. A special gratitude I give to my supervisor, \textbf{Dr. Salam Michael Singh}, whose contribution in stimulating suggestions and encouragement helped me to coordinate my project especially in writing this report.
+
+	I would also like to express my sincere gratitude to the Head of the Department (CSE), \textbf{Dr. Navanth Saharia}, for his constant support and for providing the necessary facilities to successfully execute this project.
+	
+	Furthermore, I would also like to acknowledge with much appreciation the crucial role of the faculty and staff of the Department of Computer Science and Engineering, Indian Institute of Information Technology Senapati, Manipur, who gave the permission to use all required equipment and necessary materials to complete the tasks. 
+	
+	Last but not least, many thanks go to my family and friends whose support, guidance, and encouragement have been invaluable throughout this endeavor.
+	
+	\vspace{1cm}
+	\begin{flushright}
+	    \textbf{ABHISHEK YADAV} \\
+	    Roll No: 230103041
+	\end{flushright}
+	
+	\vspace{1cm}
+	
+	\addcontentsline{toc}{chapter}{Acknowledgement}
+	\tableofcontents
+	\listoffigures
+        \listoftables
+	\chapter{Introduction}
+	\input{chapters/1_Introduction}
+        \chapter{Literature Survey}
+        \input{chapters/2_Literature_Survey}
+        \chapter{Requirement Engineering}
+        \input{chapters/3_Requirement}
+        \chapter{System Design}
+        \input{chapters/4_System_Design}
+        \chapter{Implementation}
+        \input{chapters/5_Implementation}
+        \chapter{Results}
+        \input{chapters/6_Results}
+        \chapter{Conclusion}
+        \input{chapters/7_Conclusion}
+        
+        \bibliography{report}
+	\bibliographystyle{plain}
+        
+	
+	
+	
+	
+\end{document}

@@ -1,18 +1,107 @@
+# Environments
 .env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python & compiled files
 __pycache__/
-*.pyc
-*.pyo
-migrations/versions/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
 
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+velocity_db.json
 
-# Large datasets — DO NOT commit
-final_unified_dataset.csv
+# Flask / app specific
+instance/
+migrations/versions/
 
-master_dataset_full.csv
-combined_dataset.csv
-analysisdataset.csv
-Dataset_5971.csv
-data-en-hi-de-fr.csv
-fraud_dataset_v3.csv
+# Logs
+*.log
 
+# Presentations
+*.pptx
+!CyberShield_Presentation_Final.pptx
+!CyberShield_Academic.pptx
+
+# Large datasets & models
+*.csv
+*.txt
+*.pkl
+!requirements.txt
+!final_models.pkl
+!final_vectorizer.pkl
+
+# Extra directories
+project extra work/
+Report/compile.log
+Report/report.log
+Report/report.aux
+Report/report.out
+Report/report.toc
+Report/report.lof
+Report/report.lot
+Report/report.blg
+Report/report.bbl
+Report/report.bib
+
+# Complaints folder PDFs
+complaints/*.pdf

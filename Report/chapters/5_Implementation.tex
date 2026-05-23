@@ -1,0 +1,295 @@
+\section{Introduction}
+CyberShield is developed primarily using Python, built on the pandas and scikit-learn stack for machine learning, and the Flask micro-framework for the web server implementation. This chapter describes the implementation modules covering data ingestion, mathematical training, and web serving. The implementation is organized across the following modules: \texttt{pipefinal.py} (offline ML training and HNM pipeline), \texttt{app.py} (Flask web server and inference engine), \texttt{models.py} (SQLAlchemy ORM models for the four database tables defined in Chapter~4), \texttt{config.py} (OAuth whitelist and Flask configuration), and \texttt{templates/} (Jinja2 HTML interfaces for citizen and admin views).
+
+\section{Development Environment and Architectural Decisions}
+
+\paragraph{Why Python and scikit-learn over deep learning frameworks?}
+The decision to use Python and scikit-learn was driven by an inference latency budget of 500ms and the explainability requirement for the Word Risk Heatmap via inspectable logistic regression coefficients. Furthermore, this approach eliminates the need for a GPU, significantly lowering the barrier for deployment.
+
+\paragraph{Why a monolithic app.py rather than a microservices architecture?}
+A monolithic architecture reduces operational complexity for a single-machine deployment and is easier for supervisors and examiners to read. The serialized pickle artifacts act as the natural service boundary between the offline training loop and the online inference server.
+
+\paragraph{Why pickle/joblib for model serialization rather than ONNX or SavedModel formats?}
+Using \texttt{joblib}\footnote{\url{https://joblib.readthedocs.io}} leverages scikit-learn's native format, allowing zero-overhead loading into RAM. This format facilitates hot-reloading via the \texttt{/admin/reload-model} endpoint without requiring a server restart, ensuring seamless model updates.
+
+\paragraph{Why SQLite + SQLAlchemy over raw SQL or a heavier RDBMS?}
+SQLite combined with SQLAlchemy provides a zero-configuration, file-based database solution with a connection pool managed by SQLAlchemy for thread safety. This setup is sufficient for the scale of a single-institution deployment without the overhead of maintaining a heavier relational database management system.
+
+\paragraph{Why Flask over Django or FastAPI?}
+Flask's micro-framework architecture \cite{grinberg2018flask} minimizes boilerplate while offering built-in Jinja2 templating and seamless integration with \texttt{flask-dance} for OAuth. Furthermore, it avoids Object-Relational Mapping (ORM) lock-in, allowing SQLAlchemy to be added independently as needed.
+
+\paragraph{Why ReportLab for PDF generation rather than WeasyPrint or a browser-based PDF?}
+ReportLab\footnote{Official ReportLab documentation: \url{https://www.reportlab.com/docs/reportlab-userguide.pdf}} is a pure Python library with no browser dependencies. Its Canvas API provides pixel-accurate layout capabilities necessary for generating formal government documents, and it operates entirely offline, ensuring privacy and reliability.
+
+\paragraph{Why Google OAuth rather than local username/password auth?}
+Delegating authentication to Google OAuth eliminates the liability of password storage and hashing. It leverages verified email identities for administrative whitelisting and relies on Google's robust infrastructure for session security.
+
+\section{Data Curation and Preprocessing}
+The \texttt{master\_dataset.csv} aggregates 26,534 labeled records across eight constituent datasets (Table~\ref{tab:dataset_provenance}), with a near-balanced class split of $12,852$ Fraud $(48.44\%)$ and $13,682$ Legit $(51.56\%)$.
+
+\begin{table}[H]
+    \centering
+    \caption{Constituent Datasets of \texttt{master\_dataset.csv}}
+    \label{tab:dataset_provenance}
+    \small
+    \begin{tabular}{|p{3.8cm}|p{4.0cm}|p{1.8cm}|p{3.2cm}|}
+    \hline
+    \textbf{Dataset Name} & \textbf{Primary Source} & \textbf{Approx. Count} & \textbf{Domain Focus} \\ \hline
+    SMS Spam Collection \newline (Almeida et al., 2011) & UCI ML Repository, public benchmark & $\sim$5,572 & General SMS spam \\ \hline
+    Dataset\_5971.csv & Mendeley Data repository & $\sim$5,971 & General SMS spam/legit \\ \hline
+    SMSSmishCollection.txt & Smishing-specific community collection & $\sim$2,000 & Phishing links via SMS \\ \hline
+    data-en-hi-de-fr.csv & Multilingual aggregation & $\sim$3,000 & Hinglish/ multilingual fraud \\ \hline
+    fraud\_dataset\_v3.csv & General phishing/fraud aggregation & $\sim$4,000 & General phishing \\ \hline
+    combined\_dataset.csv & Aggregated public datasets & $\sim$3,000 & Mixed fraud schemas \\ \hline
+    analysisdataset.csv & ACM-cited analysis dataset & $\sim$2,000 & Adversarial SMS payloads \\ \hline
+    Manually curated Indian phishing strings & Custom collection for regional context & $\sim$1,000 & Manipur/NE India fraud \\ \hline
+    \end{tabular}
+\end{table}
+
+The aggregated corpus spans diverse linguistic styles and fraud domains, ensuring that the soft-voting ensemble generalizes robustly beyond any single-source benchmark.
+
+This near-balanced distribution means SMOTE \cite{chawla2002smote} was not required, though Hard Negative Mining was still applied for boundary refinement.
+
+A critical implementation choice was the handling of high-cardinality artifacts --- URLs, phone numbers, monetary amounts, and OTPs. Rather than stripping them entirely, the \texttt{preprocess()} function uses regular expressions \cite{friedl2006mastering} to replace each artifact class with a fixed semantic placeholder token (e.g., \texttt{SUSPICIOUS\_URL}, \texttt{PHONE\_NUMBER}). This neutralization prevents the model from memorizing specific malicious strings (e.g., \texttt{bit.ly/xyz}) while preserving the fraud-signal value of the artifact's presence as a feature.
+
+\begin{algorithm}[h]
+\caption{Preprocessing and Artifact Neutralization Methodology}\label{alg:artifact}
+\begin{algorithmic}[1]
+\Function{Preprocess}{$\text{text}$}
+    \State $\text{text} \gets \textsc{Lower}(\text{text})$
+    \State $\text{text} \gets \textsc{Substitute}(\text{text},\ \texttt{http\textbackslash S+|www.\textbackslash S+},\ \texttt{SUSPICIOUS\_URL})$
+    \State $\text{text} \gets \textsc{Substitute}(\text{text},\ \texttt{\textbackslash b[789]\textbackslash d\{9\}\textbackslash b},\ \texttt{PHONE\_NUMBER})$
+    \State $\text{text} \gets \textsc{Substitute}(\text{text},\ \texttt{rs\textbackslash.?\textbackslash s*\textbackslash d[\textbackslash d,]+},\ \texttt{MONEY\_AMOUNT})$
+    \State $\text{text} \gets \textsc{Substitute}(\text{text},\ \texttt{\textbackslash \$\textbackslash s*\textbackslash d[\textbackslash d,]+},\ \texttt{MONEY\_AMOUNT\_USD})$
+    \State $\text{text} \gets \textsc{Substitute}(\text{text},\ \texttt{\textbackslash b\textbackslash d\{4,6\}\textbackslash b},\ \texttt{OTP\_NUMBER})$
+    \State \Comment{strip non-word punctuation}
+    \State $\text{text} \gets \textsc{Substitute}(\text{text},\ \texttt{[\textasciicircum\textbackslash w\textbackslash s]},\ \texttt{ })$
+    \State $\text{text} \gets \textsc{CollapseWhitespace}(\text{text})$
+    \State \Return $\text{text}$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\section{Offline Machine Learning Training Pipeline}
+The offline intelligence loop uses scikit-learn for vectorization, classification, and cross-validation.
+\subsection{Fixed Sub-Set Splitting}
+To guarantee mathematical reproducibility across multiple retraining cycles, the algorithm checks for a serialized pickle object named \texttt{split\_indices.pkl}. If this file exists, the exact Training, Validation, and Test arrays used historically are preserved. This prevents ``data leakage''---where newly appended HITL labels inadvertently contaminate the frozen test set, artificially inflating accuracy metrics. The dataset of 26,534 records is split into Training (18,574 --- 70\%), Validation (3,980 --- 15\%), and Test (3,980 --- 15\%) subsets. The larger validation partition ensures sufficient samples for statistically stable Hard Negative Mining extraction. New HITL labels dynamically query the database and are appended \textit{exclusively} to the training array.
+
+\subsection{Matrix Computation (TF-IDF)}
+
+The raw contextual text is converted into a numerical feature matrix via a
+\texttt{FeatureUnion} that concatenates two complementary TF-IDF
+vectorizers, yielding a combined 25{,}000-feature representation.
+
+\paragraph{Word-level vectorizer} Uses
+\texttt{ngram\_range=(1, 2)}, \texttt{min\_df=3}, \texttt{max\_df=0.85},\\
+\texttt{max\_features=20000}, and \texttt{sublinear\_tf=True}, with a custom
+60-word stop-word list curated for fraud-detection (English function words
+plus domain-specific noise terms such as \texttt{thanks}, \texttt{love},
+\texttt{health}, \texttt{university}, \texttt{http}). The default scikit-learn
+English stop-word list was not used as it removes some terms that carry
+discriminative value in fraud contexts.
+
+\paragraph{Character-level vectorizer} Uses
+\texttt{analyzer="char\_wb"}, \texttt{ngram\_range=(3, 5)},\\ and
+\texttt{max\_features=5000}. Character n-grams provide explicit robustness
+against adversarial obfuscation (intentional misspellings, character
+substitution, and homoglyph attacks) that pure word-level features miss.
+
+\paragraph{Fitting protocol} The \texttt{FeatureUnion} is explicitly fitted
+only on the training partition. Applying \texttt{.fit\_transform()} to the
+entire corpus prior to splitting would cause vocabulary leakage from the
+test set into the training pipeline, inflating reported metrics.
+
+\subsection{Hard Negative Mining Protocol}
+\label{sec:hnm-mining}
+Because misclassifying a legitimate time-critical message (e.g., an urgent banking alert) carries higher operational cost than a missed scam, the implementation runs programmatic Hard Negative Mining on the validation subset to refine the decision boundary.
+
+\begin{algorithm}[h]
+\caption{False-Positive-Driven Hard Negative Mining}\label{alg:hnm}
+\begin{algorithmic}[1]
+\Procedure{MineHardNegatives}{$X_{\text{val}},\ y_{\text{val}},\ \hat{P}_{\text{val}}$}
+    \State $H_{\text{fp}} \gets \emptyset$
+    \For{$i \gets 1$ \textbf{to} $|y_{\text{val}}|$}
+        \If{$y_{\text{val}}[i] = 0$ \textbf{and} $\hat{y}_{\text{val}}[i] = 1$}
+            \Comment{False Positive: Legit predicted as Fraud}
+            \State $H_{\text{fp}} \gets H_{\text{fp}} \cup \{(X_{\text{val}}[i],\ y_{\text{val}}[i],\ \hat{P}_{\text{val}}[i])\}$
+        \EndIf
+    \EndFor
+    \State Sort $H_{\text{fp}}$ descending by $\hat{P}_{\text{val}}[i]$
+    \State $k \gets \lceil 0.15 \times |H_{\text{fp}}| \rceil$ \Comment{top 15\% hardest FPs}
+    \State \Return $H_{\text{fp}}[1:k]$
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+The mined hard examples are injected into the retraining call with an elevated \texttt{sample\_weight} of $w=2.0$, mathematically forcing the loss function to penalize errors on these boundary cases without appending duplicate rows to the dataset. This avoids the dataset distribution drift that naive row-duplication produces. All three base classifiers are refitted on the original training set augmented only by these weighted hard negatives. The retrained models and the fitted vectorizer are then serialized via \texttt{joblib} to \texttt{final\_models.pkl} and \texttt{final\_vectorizer.pkl}.
+
+\section{Online Inference Application Core}
+The Flask backend provides continuous daemon hosting of the inference state.
+When the server boots, the serialized models and vectorizer are loaded entirely into RAM.
+
+\subsection{Real-Time Inference Endpoint}
+When an HTTP POST request is received via the web form:
+\begin{enumerate}
+    \item The raw message is ingested and vectorized via \texttt{vectorizer.transform([msg])}.
+    \item Standard \texttt{predict\_proba()} methods are invoked across LR, SVM (via CalibratedClassifierCV \cite{platt1999probabilistic}), and NB.
+    \item The $0.2/0.5/0.3$ soft-voting logic generates $P_{\text{final}}$.
+    \item A colloquial guard then runs: the message is tested against a small set of regex patterns matching common conversational openers (e.g., \texttt{\textasciicircum(hi|hey|hello|good morning|gn)\textbackslash b}, \texttt{\textasciicircum how are you}, \texttt{\textasciicircum(ok|okay|sure|thanks|noted|got it)}). If any pattern matches \emph{and} the raw ensemble probability is below 0.50, $P_{\text{final}}$ is forced to 0.05 to suppress threshold noise on benign short messages. This guard is intentionally conservative: it does not override high-probability predictions, so a fraudulent message starting with ``Hi'' is still flagged correctly.
+    \item The result maps to the threshold logic boundary: FRAUD ($\geq 0.90$), SUSPICIOUS ($\geq 0.70$), UNCERTAIN ($\geq 0.30$), LEGIT ($< 0.30$).
+\end{enumerate}
+
+\begin{algorithm}[h]
+\caption{Soft-Voting Ensemble Inference}\label{alg:soft_voting}
+\begin{algorithmic}[1]
+\Require raw message string $msg$, vectorizer $V$, models (LR, SVM, NB), weights ($w_{lr}=0.20, w_{svm}=0.50, w_{nb}=0.30$)
+\Ensure $P_{\text{final}} \in [0,1]$, $\text{risk\_level} \in \{\text{FRAUD, SUSPICIOUS, UNCERTAIN, LEGIT}\}$
+\State $\text{preprocessed} \gets \textsc{Preprocess}(msg)$
+\State $X \gets V.\text{transform}([\text{preprocessed}])$
+\State $p_{lr} \gets \text{LR.predict\_proba}(X)[1]$
+\State $p_{svm} \gets \text{SVM.predict\_proba}(X)[1]$ \Comment{CalibratedClassifierCV}
+\State $p_{nb} \gets \text{NB.predict\_proba}(X)[1]$
+\State $P_{\text{raw}} \gets (w_{lr} \times p_{lr}) + (w_{svm} \times p_{svm}) + (w_{nb} \times p_{nb})$
+\If{$msg \text{ matches conversational regex \textbf{and} } P_{\text{raw}} < 0.50$}
+    \State $P_{\text{final}} \gets 0.05$ \Comment{colloquial override}
+\Else
+    \State $P_{\text{final}} \gets P_{\text{raw}}$
+\EndIf
+\If{$P_{\text{final}} \geq 0.90$}
+    \State $\text{risk\_level} \gets \text{FRAUD}$
+\ElsIf{$P_{\text{final}} \geq 0.70$}
+    \State $\text{risk\_level} \gets \text{SUSPICIOUS}$
+\ElsIf{$P_{\text{final}} \geq 0.30$}
+    \State $\text{risk\_level} \gets \text{UNCERTAIN}$
+\Else
+    \State $\text{risk\_level} \gets \text{LEGIT}$
+\EndIf
+\State \Return $P_{\text{final}},\ \text{risk\_level}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\caption{Velocity Intelligence Update}\label{alg:velocity}
+\begin{algorithmic}[1]
+\Require extracted phones list, extracted URLs list, $complaint\_id$
+\Ensure updated \texttt{velocity\_db} entries with threat levels
+\For{\textbf{each} $artifact \in \text{phones} \cup \text{URLs}$}
+    \State $record \gets \text{DB.query}(indicator\_value = artifact)$
+    \If{$record \text{ exists}$}
+        \State $record.count \gets record.count + 1$
+        \State $record.complaint\_ids.\text{append}(complaint\_id)$
+        \State $record.last\_seen \gets \textsc{Now}()$
+    \Else
+        \State $\text{DB.insert}(indicator\_value=artifact,\ count=1,\ first\_seen=\textsc{Now}())$
+    \EndIf
+    \If{$record.count \geq 4$}
+        \State $threat\_level \gets \text{CRITICAL}$
+    \ElsIf{$record.count \geq 2$}
+        \State $threat\_level \gets \text{HIGH}$
+    \Else
+        \State $threat\_level \gets \text{MED}$
+    \EndIf
+    \State $\text{DB.commit}()$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\caption{Word Risk Heatmap Token Scoring}\label{alg:heatmap}
+\begin{algorithmic}[1]
+\Require preprocessed message string, trained LR model, vectorizer $V$
+\Ensure list of $(token, risk\_score)$ pairs for rendering
+\State $tokens \gets \text{preprocessed.split}()$
+\State $feature\_names \gets V.\text{get\_feature\_names\_out}()$
+\State $coef\_map \gets \text{dict}(\text{zip}(feature\_names,\ \text{LR.coef\_}[0]))$
+\State $result \gets []$
+\For{\textbf{each} token $t \in tokens$}
+    \State $score \gets coef\_map.\text{get}(t,\ 0.0)$
+    \State $result.\text{append}((t,\ score))$
+\EndFor
+\State \Return $result$ \Comment{rendered as colored spans in Jinja2 template}
+\end{algorithmic}
+\end{algorithm}
+
+The \texttt{/analyze} route returns a JSON response containing the fields: \texttt{fraud\_probability}, \texttt{risk\_level}, \texttt{extracted\_urls}, \texttt{extracted\_phones}, \texttt{word\_risk\_tokens}, and \texttt{complaint\_id}.
+
+\subsection{NCRP Form Generation}
+If the victim desires to file an FIR, the \texttt{ReportLab} module is utilized. A PDF Canvas object is instantiated on an A4 canvas (595 $\times$ 842 points), importing custom graphical headers (via \texttt{drawImage}). The parsed artifacts (Phones and URLs) are rendered hierarchically inside tables onto the digital sheet using ReportLab's Table class with alternating row shading for readability, removing the need for the victim to perform manual typography extraction. The generated PDF includes the complaint ID, submission timestamp, raw message text, extracted URLs and phone numbers, assigned risk level, probability score, and a recommended NCRP complaint category code. PDF download routes are gated behind the same \texttt{@login\_required} decorator used on \texttt{/history}, ensuring that a victim's complaint PDF is accessible only to the authenticated user who submitted the original analysis.
+
+\subsection{Administrative Interface and OAuth}
+
+The administrative routes are protected by a two-layer gate. First, the
+\texttt{flask-dance} Google OAuth 2.0 \cite{hardt2012oauth} blueprint mediates authentication and
+issues a session cookie tied to the verified Google account. Second, a
+custom \texttt{@admin\_required} decorator validates that the authenticated
+email belongs to the whitelist defined in \texttt{config.py}. Requests that
+fail either check return HTTP 401 (unauthenticated) or HTTP 403
+(authenticated but not authorized).
+
+Once an admin reaches the dashboard, label submissions are not written
+through raw SQL. Instead, Flask-SQLAlchemy ORM operations update the
+\texttt{pending\_review} table, setting \texttt{admin\_label} to
+\texttt{`fraud'} or \texttt{`legit'} and recording the labeller's email in
+\texttt{labeled\_by}. The connection pool managed by SQLAlchemy ensures
+thread-safe writes under concurrent admin activity, replacing the manual
+WAL-mode locking used in the v3 architecture.
+
+After labels accumulate, the admin can trigger \texttt{/admin/retrain}
+which spawns the \texttt{pipefinal.py} subprocess described in
+Section~\ref{sec:hnm-mining}. On successful completion, the admin
+clicks Reload Model, invoking \texttt{/admin/reload-model} which
+hot-loads the new pickle artifacts into the running Flask process
+without a server restart.
+
+\section{Testing}
+
+\subsection{Unit Testing}
+The following specific unit verifications were performed to ensure module-level correctness:
+\begin{itemize}
+    \item \texttt{preprocess("WIN Rs. 50,000 now! Call 9876543210")}: Expected output must contain \texttt{MONEY\_AMOUNT} and \texttt{PHONE\_NUMBER} tokens.
+    \item Soft-voting formula: Manual calculation of $(0.20 \times 0.85) + (0.50 \times 0.72) + (0.30 \times 0.68) = 0.170 + 0.360 + 0.204 = 0.734$, verified against \texttt{predict\_proba()} output.
+    \item Colloquial override: Input ``Hey how are you?'' with a raw ensemble probability of 0.31 must output $P_{\text{final}} = 0.05$.
+    \item \texttt{split\_indices.pkl}: Loading the file and confirming the combined train, validation, and test sizes sum to 26,534 records.
+\end{itemize}
+
+\subsection{Integration Testing}
+The integration between modules was validated using the following checks:
+\begin{itemize}
+    \item After \texttt{pipefinal.py} runs, \texttt{final\_models.pkl} and \texttt{final\_vectorizer.pkl} must exist on disk and be loadable by \texttt{joblib}.
+    \item After \texttt{app.py} boots, a POST request to \texttt{/analyze} with a known fraud SMS returns \texttt{risk\_level = "FRAUD"} and \texttt{fraud\_probability} $\geq 0.90$.
+    \item After an admin labels a complaint and clicks Retrain, the \texttt{pipefinal.py} subprocess exits with code 0 and the model files are updated (verified by checking the file modification timestamp).
+    \item The \texttt{velocity\_db} table successfully increments the count for a repeated phone number across two separate \texttt{/analyze} submissions.
+\end{itemize}
+
+\subsection{System Testing}
+An end-to-end run was simulated using a corpus of known fraud SMS messages, requiring the system to meet the following pass criteria:
+\begin{enumerate}
+    \item The server starts without encountering exceptions.
+    \item A known fraud SMS successfully scores as FRAUD ($\geq 0.90$).
+    \item A borderline SMS scores as UNCERTAIN and correctly appears in the administrative queue.
+    \item An administrator can label the borderline message and trigger retraining without a server restart.
+    \item A PDF report is successfully generated and downloadable for a FRAUD complaint.
+\end{enumerate}
+
+\subsection{User Acceptance Testing}
+Testing across the four user-facing flows confirmed the system's readiness:
+\begin{itemize}
+    \item \textbf{Citizen:} Successfully pasting an SMS, viewing the result, downloading the PDF, and utilizing the NCRP helper interface.
+    \item \textbf{Admin:} Logging in via OAuth, viewing the queue, labeling a message, triggering retraining, and reloading the model.
+    \item \textbf{Edge cases:} Handling empty input, extremely long input ($>800$ characters), and non-English characters gracefully.
+    \item \textbf{Mobile:} Responsive layout verified to display correctly on a Chrome mobile viewport.
+\end{itemize}
+
+\section{Challenges and Solutions}
+
+\begin{enumerate}
+    \item \textbf{Challenge 1: Preprocess() function consistency.} The preprocessing function must be byte-for-byte identical in \texttt{pipefinal.py} and \texttt{app.py}. Any divergence means the vectorizer sees different text during training versus inference, silently degrading accuracy. \textbf{Solution:} The \texttt{preprocess()} function is defined once in a shared location and imported by both modules, or explicitly copied with a comment warning against independent modification.
+    
+    \item \textbf{Challenge 2: Pickle artifact corruption on failed retrain.} If \texttt{pipefinal.py} crashes midway, partially written pickle files could corrupt the live model. \textbf{Solution:} The script writes to temporary files and performs an atomic rename only upon successful completion.
+    
+    \item \textbf{Challenge 3: Thread safety for concurrent /analyze requests.} Flask's development server is single-threaded, but production deployments handling multiple simultaneous citizens would cause race conditions on SQLite. \textbf{Solution:} SQLAlchemy connection pooling with thread-local sessions was implemented, replacing the raw \texttt{sqlite3} calls from the v3 architecture.
+    
+    \item \textbf{Challenge 4: Colloquial false positives.} Short conversational messages (e.g., ``Hi'', ``OK noted'') triggered low but non-negligible ensemble probabilities, occasionally crossing the 0.30 UNCERTAIN threshold and polluting the admin queue. \textbf{Solution:} A deterministic regex guard was introduced to force $P_{\text{final}} = 0.05$ for messages matching conversational patterns when the raw probability is below 0.50.
+    
+    \item \textbf{Challenge 5: ReportLab Unicode handling.} Victim names containing non-ASCII characters (such as Hindi names in Roman script or special punctuation) caused ReportLab's default font to raise encoding errors. \textbf{Solution:} All text fields passed to the Canvas API are sanitized to ASCII-safe strings with a fallback replacement character before rendering.
+\end{enumerate}

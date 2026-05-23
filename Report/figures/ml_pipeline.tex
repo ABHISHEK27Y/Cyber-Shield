@@ -1,0 +1,38 @@
+\documentclass[tikz, border=10pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+
+\begin{document}
+    \begin{tikzpicture}[
+        node distance=1.5cm and 1.5cm,
+        block/.style={rectangle, draw=black, thick, fill=white, text=black, text width=2.5cm, align=center, minimum height=1.2cm, rounded corners},
+        arrow/.style={thick, ->, >=stealth, draw=black}
+    ]
+    \node[block] (raw) {Raw Text Input};
+    \node[block, right=of raw] (regex) {RegEx Entity Extraction (URLs, Phones)};
+    \node[block, below=of regex] (velocity) {Velocity Tracking DB};
+    \node[block, right=of regex] (lower) {Lowercase \& Strip Punctuation};
+    \node[block, right=of lower] (tfidf) {TF-IDF Vectorization ($25K$ features)};
+    
+    \node[block, right=of tfidf] (svm) {Support Vector Machine (SVM)};
+    \node[block, above=0.5cm of svm] (lr) {Logistic Regression (LR)};
+    \node[block, below=0.5cm of svm] (nb) {Naive Bayes (MNB)};
+    
+    \node[block, right=of svm] (predict) {Soft Voting Ensemble $P_{final}$};
+    
+    \draw[arrow] (raw) -- (regex);
+    \draw[arrow] (regex) -- node[above=0.1cm, font=\footnotesize, align=center] {Sanitized\\String} (lower);
+    \draw[arrow, dashed] (regex) -- node[right=0.1cm, font=\footnotesize] {Extracted IoCs} (velocity);
+    \draw[arrow] (lower) -- (tfidf);
+    
+    \draw[arrow] (tfidf.east) -- ++(0.5,0) |- (lr.west);
+    \draw[arrow] (tfidf.east) -- (svm.west);
+    \draw[arrow] (tfidf.east) -- ++(0.5,0) |- (nb.west);
+    
+    \draw[arrow] (lr.east) -- ++(0.5,0) |- (predict.west);
+    \draw[arrow] (svm.east) -- (predict.west);
+    \draw[arrow] (nb.east) -- ++(0.5,0) |- (predict.west);
+    \end{tikzpicture}
+\end{document}

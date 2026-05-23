@@ -1,0 +1,24 @@
+\section{Conclusion}
+The literature review in Section 2.5 identified three critical gaps in contemporary fraud detection systems: the absence of uncertainty-aware classification architectures, a lack of end-to-end actionable intelligence pipelines for law enforcement, and vulnerability to rapid concept drift in adversarial threat vectors. In this project, we designed and evaluated \textbf{CyberShield}, an uncertainty-aware, Human-in-the-Loop fraud detection ecosystem specifically structured to resolve these deficiencies. CyberShield probabilistically structures risk across defined boundary strata: highly confident malicious patterns ($P \geq 0.90$) trigger automated generation of a pre-filled NCRP-compliant PDF for manual submission, ambiguous cases ($0.30 \leq P < 0.70$) are routed to a secure administrative queue for HITL adjudication \cite{holzinger2016interactive} and subsequent Hard Negative Mining, while safe messages ($P < 0.30$) are cleared without administrative overhead.
+
+The mathematical ensemble of Logistic Regression, SVM, and Naive Bayes over a 25,000-feature TF-IDF matrix achieved \textbf{94.87\% test-set accuracy} and an \textbf{ROC-AUC of 0.9895} on a frozen partition of 3,980 adversarial examples. All five primary objectives defined in Section 1.4 were successfully realized: uncertainty-aware classification, HITL calibration, token-level explainability, velocity intelligence tracking, and automated NCRP adjudication. Critically, the novel \textit{False-Positive-Driven} Hard Negative Mining strategy --- which selectively mines the top 15\% highest-confidence False Positives and retrains using $w=2.0$ sample weights --- improved Fraud-class precision from 0.9508 to 0.9518 while holding recall perfectly stable at 0.9419. This validates the system's primary design constraint: blocking a legitimate citizen's message is operationally worse than missing a single spam, and the architecture was built to enforce this inequality mathematically. The wide UNCERTAIN band (0.30--0.70), which initially appears to sacrifice automation, is in fact the system's primary safety mechanism against catastrophic false negatives. By intertwining natural language semantic analysis with lexical URL/Phone Velocity Tracking, CyberShield demonstrates a pathway toward bridging the gap between raw AI predictions and actionable cyber-intelligence for law enforcement agencies. More broadly, acknowledging model uncertainty is not a weakness in deployed AI systems but a deliberate safety mechanism applicable to any high-stakes classification domain.
+
+\section{Limitations of the Current System}
+Despite the high mathematical efficacy, real-world deployment poses several limitations:
+\begin{enumerate}
+    \item \textbf{Multilingual Constraint:} The system relies on English and Romanglish (Hinglish) syntax. Regional scripts require external translation APIs or multilingual models (e.g., MuRIL).
+    \item \textbf{Contextual Isolation:} Text is analyzed in isolation, lacking conversational memory required to detect multi-turn phishing engagements; future stateful session modeling is needed.
+    \item \textbf{Adversarial Masking:} The character n-gram vectorizer is vulnerable to zero-width unicode insertion and homoglyph attacks; Unicode NFKC normalization and punycode decoding are required countermeasures.
+    \item \textbf{Database Scalability:} SQLite's file-lock mechanism bottlenecks under high concurrency; migration to a Redis-based cache is recommended for scaling.
+\end{enumerate}
+
+\section{Future Scope}
+The architectural modularity of CyberShield enables extensive scaling across three priority tiers:
+\begin{itemize}
+    \item \textbf{Near-Term --- NCRP Direct API Integration:} Establish a REST API connection with \texttt{cybercrime.gov.in} to auto-submit high-confidence cases ($P \geq 0.90$) as draft FIRs, replacing the current PDF-and-helper model.
+    \item \textbf{Near-Term --- Browser Extension:} Package the inference endpoint as a browser extension for seamless in-context message analysis by citizens.
+    \item \textbf{Medium-Term --- Multilingual Support:} Integrate translation pipelines or multilingual embeddings to process all regional Indian languages.
+    \item \textbf{Medium-Term --- Transformer Inference:} Migrate to contextual embeddings via DistilBERT, provided the 500ms latency budget is consistently met on available infrastructure.
+    \item \textbf{Long-Term --- Federated Learning:} Adapt the active-learning backend to federated schemas, enabling decentralized training across state cybercrime offices without exposing victim data.
+    \item \textbf{Long-Term --- Multimodal Detection:} Expand ingestion to accept image screenshots (via OCR) and audio samples (via Speech-to-Text) to combat steganography and vishing threats.
+\end{itemize}

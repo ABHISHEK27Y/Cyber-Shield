@@ -1,7 +1,24 @@
 # ============================================================
 # FRAUD DETECTION SYSTEM -- FINAL VERSION
 # ============================================================
+# Key upgrades:
+#
+#   1. FIXED TRAIN/TEST SPLIT — saved to split_indices.pkl
+#      - First run  → creates and saves split by row index
+#      - Every run after → reloads EXACT same split
+#      - Test set permanently frozen, never seen during training
+#      - Accuracy numbers are truly reproducible across runs
+#
+#   2. HITL SAMPLE ROUTING
+#      - Admin labels UNCERTAIN cases via portal
+#      - append_to_dataset() adds them to master_dataset.csv
+#      - New rows have indices OUTSIDE original split
+#      - Pipeline detects them and routes to training ONLY
+#      - Test set never contaminated by human-labeled data
+#      - Model genuinely improves from admin feedback
+# ============================================================
 
+import os
 import pandas as pd
 import numpy as np
 import re
@@ -23,6 +40,9 @@ from sklearn.metrics import (
 # ============================================================
 # CONSTANTS
 # ============================================================
+
+RANDOM_STATE = 42       # fixed forever — never change this
+SPLIT_FILE   = "split_indices.pkl"
 
 CUSTOM_STOPWORDS = [
     "the","is","in","it","of","and","to","a","that","this","for","on",
@@ -49,6 +69,11 @@ CONVERSATIONAL_PATTERNS = [
 # ============================================================
 
 def preprocess(text):
+    """
+    Normalise raw message for vectoriser input.
+    CRITICAL: Must stay identical in app.py and pipefinal.py.
+    Any change here requires full retraining from scratch.
+    """
     text = str(text).lower()
     text = re.sub(r'http\S+|www\.\S+',   ' SUSPICIOUS_URL ',   text)
     text = re.sub(r'\b[789]\d{9}\b',      ' PHONE_NUMBER ',     text)
@@ -72,13 +97,12 @@ if __name__ == '__main__':
 
     # ----------------------------------------------------------
     # 1. LOAD DATA
-    # CHANGE 1: filename is now master_dataset.csv
-    # CHANGE 2: labels are already 0/1 integers — no mapping needed
     # ----------------------------------------------------------
 
-    df = pd.read_csv("master_dataset.csv")                  # CHANGED
+    df = pd.read_csv("master_dataset.csv")
     df = df[['text', 'label']].dropna().drop_duplicates()
-    df['label'] = df['label'].astype(int)                   # CHANGED (was string mapping)
+    df['label'] = df['label'].astype(int)
+    df = df.reset_index(drop=True)   # clean 0-based index — required for split
 
     print(f"Total samples  : {len(df)}")
     print(f"Fraud (1)      : {df['label'].sum()}")
@@ -91,21 +115,111 @@ if __name__ == '__main__':
 
     df["clean_text"] = df["text"].apply(preprocess)
 
-    # ----------------------------------------------------------
-    # 3. THREE-WAY SPLIT (train 70% / val 15% / test 15%)
-    # ----------------------------------------------------------
-
     X = df["clean_text"]
     y = df["label"]
 
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X, y, test_size=0.30, stratify=y, random_state=42
-    )
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=0.50, stratify=y_temp, random_state=42
-    )
+    # ----------------------------------------------------------
+    # 3. FIXED TRAIN / VAL / TEST SPLIT
+    #
+    #    HOW IT WORKS:
+    #    First run:
+    #      - Creates 70/15/15 stratified split
+    #      - Saves row indices to split_indices.pkl
+    #      - These indices are frozen permanently
+    #
+    #    Every subsequent run (including after HITL retraining):
+    #      - Reloads exact same indices from split_indices.pkl
+    #      - Detects any NEW rows added by admin via portal
+    #      - Routes new rows to training set ONLY
+    #      - Test set never changes — results are comparable
+    #
+    #    HITL flow:
+    #      Admin labels UNCERTAIN case in portal
+    #      → append_to_dataset() adds row to master_dataset.csv
+    #      → New row gets index BEYOND original split range
+    #      → This pipeline detects it as "new_indices"
+    #      → Added to train only, test stays frozen
+    # ----------------------------------------------------------
 
-    print(f"Train : {len(X_train)} | Val : {len(X_val)} | Test : {len(X_test)}\n")
+    if os.path.exists(SPLIT_FILE):
+        # ── Reload existing split ──────────────────────────────
+        print(f"Loading existing split from {SPLIT_FILE}")
+        print("Same split reused — test set permanently frozen.\n")
+
+        with open(SPLIT_FILE, "rb") as f:
+            split_indices = pickle.load(f)
+
+        train_idx = split_indices["train"]
+        val_idx   = split_indices["val"]
+        test_idx  = split_indices["test"]
+
+        # Safety check — warn if original indices missing
+        all_idx       = set(df.index.tolist())
+        missing_train = set(train_idx) - all_idx
+        missing_val   = set(val_idx)   - all_idx
+        missing_test  = set(test_idx)  - all_idx
+
+        if missing_train or missing_val or missing_test:
+            print(f"WARNING: {len(missing_train)} train, "
+                  f"{len(missing_val)} val, "
+                  f"{len(missing_test)} test indices missing from dataset.")
+            print("Dataset may have changed. "
+                  "Delete split_indices.pkl to recreate.\n")
+
+        # ── HITL sample routing ────────────────────────────────
+        # Any row index outside original split = new HITL sample
+        # Route to training only — never val or test
+        original_indices = set(train_idx + val_idx + test_idx)
+        new_indices      = [
+            i for i in df.index.tolist()
+            if i not in original_indices
+        ]
+
+        if new_indices:
+            print(f"Found {len(new_indices)} new HITL-labeled sample(s)")
+            print(f"Adding to training set only — test set unchanged.")
+            print(f"Train: {len(train_idx)} -> {len(train_idx) + len(new_indices)}\n")
+            train_idx = train_idx + new_indices
+        else:
+            print("No new HITL samples found.\n")
+
+        X_train = X.loc[train_idx]
+        y_train = y.loc[train_idx]
+        X_val   = X.loc[val_idx]
+        y_val   = y.loc[val_idx]
+        X_test  = X.loc[test_idx]
+        y_test  = y.loc[test_idx]
+
+    else:
+        # ── First run — create and save split ──────────────────
+        print(f"No split file found.")
+        print(f"Creating new split (random_state={RANDOM_STATE})")
+        print(f"Saving to {SPLIT_FILE} — all future runs reuse this.\n")
+
+        X_train, X_temp, y_train, y_temp = train_test_split(
+            X, y, test_size=0.30,
+            stratify=y, random_state=RANDOM_STATE
+        )
+        X_val, X_test, y_val, y_test = train_test_split(
+            X_temp, y_temp, test_size=0.50,
+            stratify=y_temp, random_state=RANDOM_STATE
+        )
+
+        split_indices = {
+            "train": X_train.index.tolist(),
+            "val":   X_val.index.tolist(),
+            "test":  X_test.index.tolist(),
+        }
+
+        with open(SPLIT_FILE, "wb") as f:
+            pickle.dump(split_indices, f)
+
+        print(f"Split saved to {SPLIT_FILE}\n")
+
+    print(f"Train : {len(X_train):,} | Val : {len(X_val):,} | Test : {len(X_test):,}")
+    print(f"Train fraud : {y_train.mean():.2%} | "
+          f"Val fraud   : {y_val.mean():.2%} | "
+          f"Test fraud  : {y_test.mean():.2%}\n")
 
     # ----------------------------------------------------------
     # 4. VECTORIZE — fit ONCE on train only, frozen after this
@@ -114,18 +228,20 @@ if __name__ == '__main__':
     print("Vectorizing...")
 
     word_vectorizer = TfidfVectorizer(
-        ngram_range=(1, 2), min_df=3, max_df=0.85,     # CHANGE 3: min_df 5→3 (smaller dataset)
+        ngram_range=(1, 2), min_df=3, max_df=0.85,
         stop_words=CUSTOM_STOPWORDS, max_features=20000, sublinear_tf=True
     )
     char_vectorizer = TfidfVectorizer(
         analyzer='char_wb', ngram_range=(3, 5),
-        max_features=5000, min_df=2                     # CHANGE 3: min_df 3→2 (smaller dataset)
+        max_features=5000, min_df=2
     )
     vectorizer = FeatureUnion([("word", word_vectorizer), ("char", char_vectorizer)])
 
     X_train_vec = vectorizer.fit_transform(X_train)
     X_val_vec   = vectorizer.transform(X_val)
     X_test_vec  = vectorizer.transform(X_test)
+
+    print(f"Vectorizer fitted. Features: {X_train_vec.shape[1]:,}\n")
 
     # ----------------------------------------------------------
     # 5. TRAIN BASE MODELS
@@ -204,23 +320,41 @@ if __name__ == '__main__':
     # 8. HARD NEGATIVE RETRAINING
     # ----------------------------------------------------------
 
-    print("Mining hard negatives from validation set...")
+    print("Mining False Positives from validation set...")
 
-    hard_mask   = y_pred_before != y_val.values
-    hard_texts  = X_val[hard_mask].tolist()
-    hard_labels = y_val[hard_mask].tolist()
+    # 1. True Hard Negative Mining: Only False Positives
+    # Actual Legit (0) -> Predicted Fraud (1)
+    false_positives_mask = (y_val.values == 0) & (y_pred_before == 1)
+    fp_indices = np.where(false_positives_mask)[0]
+    
+    # 2. Confidence-based filtering
+    fp_probs = probs_before[false_positives_mask, 1]
+    sorted_idx_by_prob = np.argsort(fp_probs)[::-1]
+    sorted_fp_indices = fp_indices[sorted_idx_by_prob]
+    
+    # 3. Top 15% hardest samples
+    top_k = max(1, int(len(sorted_fp_indices) * 0.15))
+    hardest_fp_indices = sorted_fp_indices[:top_k]
+    
+    hard_texts  = X_val.iloc[hardest_fp_indices].tolist()
+    hard_labels = y_val.iloc[hardest_fp_indices].tolist()
 
-    print(f"Hard examples found: {len(hard_texts)}\n")
+    print(f"Total False Positives: {len(fp_indices)}")
+    print(f"Top 15% Hard Examples kept: {len(hard_texts)}\n")
 
+    # 4. Weighted retraining
     X_aug     = list(X_train) + hard_texts
     y_aug     = list(y_train) + hard_labels
-    X_aug_vec = vectorizer.transform(X_aug)
+    X_aug_vec = vectorizer.transform(X_aug)   # vectorizer NOT re-fit
+    
+    # Base weight 1.0, Hard Negative weight 2.0
+    weights = [1.0] * len(X_train) + [2.0] * len(hard_texts)
 
-    lr.fit(X_aug_vec, y_aug)
-    nb.fit(X_aug_vec, y_aug)
-    svm_cal.fit(X_aug_vec, y_aug)
+    lr.fit(X_aug_vec, y_aug, sample_weight=weights)
+    nb.fit(X_aug_vec, y_aug, sample_weight=weights)
+    svm_cal.fit(X_aug_vec, y_aug, sample_weight=weights)
 
-    print("Hard negative retraining complete.\n")
+    print("False-Positive-Driven Hard negative retraining complete.\n")
 
     # ----------------------------------------------------------
     # 9. FINAL EVALUATION ON UNTOUCHED TEST SET
@@ -242,7 +376,9 @@ if __name__ == '__main__':
     print(f"{'Threshold':<12} {'Precision':>10} {'Recall':>8} {'F1 (Fraud)':>12}")
     for threshold in [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60]:
         preds  = (probs_final[:, 1] > threshold).astype(int)
-        report = classification_report(y_test, preds, output_dict=True, zero_division=0)
+        report = classification_report(
+            y_test, preds, output_dict=True, zero_division=0
+        )
         fraud  = report.get('1', {})
         print(f"{threshold:<12.2f} {fraud.get('precision',0):>10.4f} "
               f"{fraud.get('recall',0):>8.4f} {fraud.get('f1-score',0):>12.4f}")
@@ -265,7 +401,7 @@ if __name__ == '__main__':
         ))
     ])
 
-    skf    = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    skf    = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
     scores = cross_val_score(
         cv_pipeline, X, y,
         cv=skf, scoring='f1_macro',
@@ -290,61 +426,7 @@ if __name__ == '__main__':
             "weights" : best_weights
         }, f)
 
-    print("Model saved -> final_vectorizer.pkl + final_models.pkl")
-
-    # ----------------------------------------------------------
-    # 12. PREDICTION FUNCTION
-    # ----------------------------------------------------------
-
-    def predict_message(message, threshold=0.45):
-        clean = preprocess(message)
-        vec   = vectorizer.transform([clean])
-        prob  = float(ensemble_proba(vec)[0][1])
-
-        if is_conversational(message) and prob < 0.35:
-            label = "LEGIT"
-        elif prob >= 0.85:
-            label = "FRAUD"
-        elif prob >= threshold:
-            label = "SUSPICIOUS"
-        elif prob >= 0.30:
-            label = "UNCERTAIN"
-        else:
-            label = "LEGIT"
-
-        return {
-            "prediction"        : label,
-            "fraud_probability" : round(prob, 4),
-            "legit_probability" : round(1 - prob, 4),
-            "risk_level"        : label,
-            "threshold_used"    : threshold
-        }
-
-    # ----------------------------------------------------------
-    # 13. SMOKE TEST
-    # ----------------------------------------------------------
-
-    test_messages = [
-        "Congratulations! Your account has been selected. Click the link to claim Rs 50,000 now.",
-        "Your OTP is 482910. Do not share this with anyone.",
-        "Hey, are you coming to college tomorrow?",
-        "Dear customer, verify your KYC immediately to avoid account suspension.",
-        "Your salary of Rs 45,000 has been credited to your account.",
-        "FREE entry: Call 9876543210 to win an iPhone. Limited offer!",
-        "Your Aadhaar KYC verification is pending. Update now to avoid account block.",
-        "PM Awas Yojana: House allotted. Pay Rs 5000 registration at pmawas.ml now.",
-        "USPS: Your parcel is on hold. Confirm address at usps-delivery.com/verify",
-    ]
-
-    print("\n--- SMOKE TEST ---")
-    print(f"{'Message':<55} {'Risk':<12} {'Fraud prob'}")
-    print("-" * 80)
-    for msg in test_messages:
-        result = predict_message(msg)
-        short  = msg[:52] + "..." if len(msg) > 55 else msg
-        flag   = " <- known FP" if "salary" in msg.lower() else ""
-        print(f"{short:<55} {result['risk_level']:<12} {result['fraud_probability']:.4f}{flag}")
-
-    print("\nLimitation: MONEY_AMOUNT token fires on both fraud and legit bank SMS.")
-    print("            Mention this in your project limitations section.\n")
+    print("Model saved  -> final_vectorizer.pkl + final_models.pkl")
+    print(f"Split saved  -> {SPLIT_FILE}")
+    print("             (delete ONLY to reset split — loses reproducibility)\n")
     print("Training pipeline completed successfully.")

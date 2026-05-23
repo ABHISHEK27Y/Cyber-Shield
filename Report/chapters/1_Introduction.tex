@@ -1,0 +1,136 @@
+\section{Background}
+In the modern digital era, the proliferation of real-time communication mediums---such as Short Message Service (SMS), WhatsApp, and email---has fundamentally transformed global interconnectedness. While these platforms have brought unprecedented convenience to billions of users, they have simultaneously created an expansive attack surface for malicious actors. Cybercrime, specifically functionally motivated digital fraud, has seen a rapid rise globally. According to the FBI Internet Crime Complaint Center (IC3) 2023 Annual Report \cite{ic3_2023}, billions of dollars are lost annually to sociotechnical cyber-attacks, ranging from phishing, smishing (SMS phishing), and vishing (voice phishing) to advanced fee scams, lottery frauds, and impersonation of government authorities or financial institutions.
+
+Traditional spam filters, built heavily on static blacklists and rudimentary regular expression targeting, have notable limitations. For instance, attackers frequently rotate malicious domains every 48 hours to evade static signature detection, rendering blacklists obsolete almost immediately. Cybercriminals employ sophisticated evasion tactics involving character obfuscation, link shortening services, and highly persuasive semantic phrasing designed to elicit an urgent emotional response from the victim. These attacks exploit human vulnerability rather than system vulnerability. Therefore, identifying these threats requires a deep contextual understanding of natural language, recognizing subtle patterns of urgency, financial requests, and implicit threats that characterize fraudulent communication.
+
+Furthermore, the scale of legitimate communication is so vast that any automated system deployed to filter fraud must maintain a high precision rate to avoid ``alert fatigue" and the consequence of suppressing time-critical, legitimate messages (such as legitimate banking alerts or emergency communications). This balance between the false positive rate (FPR) and the true positive rate (TPR) necessitates a paradigm shift from deterministic to probabilistic, uncertainty-aware computational models. 
+
+\section{Motivation}
+The primary motivation for this project stems from the socioeconomic impact of digital fraud on demographics with lower digital literacy. Attackers frequently utilize local dialects, persuasive psychological triggers, and spoofed authoritative entities (such as banks or government agencies) to bypass the user's critical thinking. When victims do recognize they have been scammed, the reporting process is often fragmented. In India, for example, the National Cybercrime Reporting Portal (NCRP) provides a centralized mechanism for citizens to report cybercrimes. This is particularly relevant in regions like Manipur and Northeast India, where digital penetration is accelerating rapidly, yet dedicated local cyber-literacy resources remain scarce, making an automated reporting assistant valuable for the local populace. However, citizens are often unsure \textit{how} to categorize the crime, \textit{what} evidence to preserve, and \textit{where} to find the malicious indicators of compromise (IoCs) within the text payload.
+
+There is a significant gap between the detection of a threat and the actionable intelligence required to report and mitigate it. Standard machine learning models classify text into binary buckets (Fraud vs. Legit). However, the real world operates in a continuum of uncertainty. If an AI system encounters a message it has never seen before, forcing a binary classification often leads to erratic predictions. 
+
+This context necessitates an intelligent system capable of not only deciphering fraudulent semantics but also acknowledging its own uncertainty. A system that can confidently flag:
+
+\begin{quote}
+    \textit{"I am 40\% sure this is fraud; I require human expert review before deciding."}
+\end{quote}
+
+represents a safer, calibrated approach to real-world deployment. Consequently, the motivation is to bridge the gap between opaque AI predictions and actionable cyber intelligence by incorporating a Human-in-the-Loop (HITL) calibration and integrating directly with national reporting standards.
+
+\section{Problem Definition}
+The core problem addressed in this project is the lack of adaptive, uncertainty-aware, and actionable fraud detection systems for short-text communications. Existing solutions are predominantly binary, lack explainability for non-technical users, and do not provide an end-to-end mechanism for threat reporting.
+
+Specifically, the problem encompasses the following sub-challenges:
+\begin{enumerate}
+    \item \textbf{High False Positives on Ambiguous Text:} Traditional Natural Language Processing (NLP) classifiers often misclassify borderline legitimate messages that contain financial keywords but lack fraudulent intent.
+    \item \textbf{Concept Drift in Threat Vectors:} Cybercriminals continually alter their phrasing to evade detection models. Static models degrade over time without continuous, curated retraining.
+    \item \textbf{Lack of Explainability:} When an AI flags a message as fraudulent, the user is rarely told \textit{why}, decreasing trust in the system. Without explainability, victims cannot identify which part of a message was suspicious, leaving them vulnerable to identical subsequent attacks.
+    \item \textbf{Fragmented Reporting Workflows:} Once a threat is identified, users lack automated tools to extract the indicators of compromise (IoCs) and format them into an actionable legal complaint.
+\end{enumerate}
+
+\section{Project Objectives}
+To address the aforementioned challenges, this project, titled \textbf{``CyberShield"}, aims to design, develop, and deploy a holistic machine-learning-driven cyber intelligence platform. The main objectives are:
+
+\begin{itemize}
+    \item \textbf{Uncertainty-Aware Classification:} To develop a probabilistic machine learning ensemble (combining Logistic Regression, Support Vector Machines, and Naive Bayes) that classifies text across multiple threshold-bounded risk strata (FRAUD, SUSPICIOUS, UNCERTAIN, and LEGIT) rather than forced binary outcomes (See Chapter 4.3).
+    \item \textbf{Human-in-the-Loop Calibration:} To implement an administrative intelligence portal where \textit{UNCERTAIN} predictions ($0.30 \leq P(Fraud) < 0.70$) are routed for manual review. This human feedback must trigger a hard-negative mining retraining pipeline to continually calibrate the model against new threats (See Chapter 4.5).
+    \item \textbf{Token-Level Explainability:} To engineer a Word Risk Heatmap that visually highlights the specific semantic tokens (words) responsible for the fraud prediction, mapped by their respective coefficient weights in the trained model (See Chapter 5.5).
+    \item \textbf{Velocity Intelligence Tracking:} To build a real-time tracking database that extracts and monitors repeating malicious entities (Phone Numbers and URLs) across multiple user submissions, assigning threat levels based on frequency velocity (See Section~4.6.3).
+    \item \textbf{Automated NCRP Adjudication:} To provide a one-click automated generation of an NCRP-compliant PDF report, extracting all relevant indicators of compromise (IoCs) and producing a ready-to-submit document for the victim (not a direct API submission to the portal, which is identified as a near-term future enhancement) (See Section~5.5).
+\end{itemize}
+
+\section{Scope of the Project}
+The scope of CyberShield is confined to textual analysis of digital communications (SMS, WhatsApp text, Email bodies) primarily in the English language. The system is optimized for English and Romanized Hinglish text. Native script inputs in Devanagari, Meitei Mayek, or other regional scripts are outside the current scope and identified as future work (See Chapter 7.3). The system extracts specific threat vectors, namely suspicious URLs and phone numbers. 
+
+The machine learning pipeline is bounded by the current supervised dataset of 26,534 messages. The architecture supports continuous expansion through its dynamic retraining pipeline, which can ingest new HITL-labeled samples in subsequent training cycles without requiring re-engineering. The project does not currently cover deep-packet inspection of network traffic, audio deepfake detection (vishing), or image-based steganography fraud. The user interface assumes deployment as a responsive web application optimized for both desktop and mobile access, facilitating easy copy-pasting of suspicious texts by end-users.
+
+\section{Project Timeline and Gantt Chart}
+The development of CyberShield was structured iteratively over several months, adopting an iterative, sprint-based development approach. The timeline below outlines the distinct phases from requirement gathering to final evaluation and documentation spanning from late January to mid-April 2026.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{ganttchart}[
+        hgrid={draw=gray!30},
+        vgrid={draw=gray!20},
+        x unit=0.9cm,
+        y unit title=0.7cm,
+        y unit chart=0.6cm,
+        title/.style={fill=gray!85, draw=black, text=white},
+        title label font=\small\bfseries,
+        title left shift=0,
+        title right shift=0,
+        bar label font=\small,
+        bar height=0.55,
+        bar top shift=0.225,
+        group label font=\small\bfseries,
+        group right shift=0,
+        group top shift=0.2,
+        group height=0.5,
+        group peaks height=0.2,
+        milestone/.append style={fill=orange, draw=orange!80!black, xscale=0.6},
+        link/.style={->, thick, draw=gray!60}
+    ]{1}{12}
+        % ── Title Row ─────────────────────────────────────────
+        \gantttitle{\textbf{Project Timeline (Weeks 1--12, Jan--Apr 2026)}}{12} \\
+        \gantttitlelist{1,...,12}{1} \\
+
+        % ── Phase 1: Research — Blue ──────────────────────────
+        \ganttgroup[
+            group/.append style={fill=blue!70!black, draw=blue!80!black}
+        ]{\textcolor{white}{\textbf{Phase 1: Research}}}{1}{2} \\
+        \ganttbar[
+            bar/.append style={fill=blue!45, draw=blue!70!black}
+        ]{Literature Survey}{1}{2} \\
+
+        % ── Phase 2: ML Pipeline — Teal ───────────────────────
+        \ganttgroup[
+            group/.append style={fill=teal!70!black, draw=teal!80!black}
+        ]{\textcolor{white}{\textbf{Phase 2: ML Pipeline}}}{2}{5} \\
+        \ganttbar[
+            bar/.append style={fill=teal!40, draw=teal!70!black}
+        ]{Data Cleaning}{2}{3} \\
+        \ganttbar[
+            bar/.append style={fill=teal!40, draw=teal!70!black}
+        ]{Model Training}{3}{5} \\
+
+        % ── Phase 3: Architecture — Orange ────────────────────
+        \ganttgroup[
+            group/.append style={fill=orange!80!red!80, draw=orange!80!black}
+        ]{\textcolor{white}{\textbf{Phase 3: Architecture}}}{4}{6} \\
+        \ganttbar[
+            bar/.append style={fill=orange!40, draw=orange!70!black}
+        ]{Ensemble Logic}{4}{5} \\
+        \ganttbar[
+            bar/.append style={fill=orange!40, draw=orange!70!black}
+        ]{Database Design}{5}{6} \\
+
+        % ── Phase 4: Web Application — Purple ─────────────────
+        \ganttgroup[
+            group/.append style={fill=violet!65!black, draw=violet!80!black}
+        ]{\textcolor{white}{\textbf{Phase 4: Web Application}}}{6}{9} \\
+        \ganttbar[
+            bar/.append style={fill=violet!35, draw=violet!70!black}
+        ]{Flask \& UI}{6}{8} \\
+        \ganttbar[
+            bar/.append style={fill=violet!35, draw=violet!70!black}
+        ]{PDF \& Admin Panel}{8}{9} \\
+
+        % ── Phase 5: Evaluation — Red ─────────────────────────
+        \ganttgroup[
+            group/.append style={fill=red!65!black, draw=red!80!black}
+        ]{\textcolor{white}{\textbf{Phase 5: Evaluation}}}{9}{12} \\
+        \ganttbar[
+            bar/.append style={fill=red!35, draw=red!70!black}
+        ]{Testing \& Bug Fixes}{9}{11} \\
+        \ganttbar[
+            bar/.append style={fill=red!35, draw=red!70!black}
+        ]{Documentation}{10}{12}
+    \end{ganttchart}%
+    }
+    \caption{CyberShield Project Development Timeline (Jan--Apr 2026) across 12 weekly sprints. Each phase is color-coded: Research (blue), ML Pipeline (teal), Architecture (orange), Web Application (purple), Evaluation (red).}
+    \label{fig:gantt}
+\end{figure}
+
+The phased approach ensured that the core machine learning components were validated before integration into the Flask web application. Each phase concluded with a checkpoint review confirming that probability arrays passed correctly between the offline training pipeline and the online inference server.

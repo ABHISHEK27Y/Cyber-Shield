@@ -115,13 +115,15 @@ weights = model_data["weights"]
 # PREPROCESSING — FROZEN: DO NOT MODIFY
 # ─────────────────────────────────────────────
 def preprocess(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r"http\S+|www\.\S+",  " SUSPICIOUS_URL ",   text)
-    text = re.sub(r"\b[6-9]\d{9}\b",    " PHONE_NUMBER ",     text)
-    text = re.sub(r"rs\.?\s?\d[\d,]*",  " MONEY_AMOUNT ",     text, flags=re.IGNORECASE)
-    text = re.sub(r"\$\s?\d[\d,]*",     " MONEY_AMOUNT_USD ", text)
-    text = re.sub(r"\b\d{4,6}\b",       " OTP_NUMBER ",       text)
-    return re.sub(r"\s+", " ", text).strip()
+    text = str(text).lower()
+    text = re.sub(r'http\S+|www\.\S+',   ' SUSPICIOUS_URL ',   text)
+    text = re.sub(r'\b[789]\d{9}\b',      ' PHONE_NUMBER ',     text)
+    text = re.sub(r'rs\.?\s*\d[\d,]+',    'MONEY_AMOUNT ',     text)
+    text = re.sub(r'\$\s*\d[\d,]+',       'MONEY_AMOUNT_USD ', text)
+    text = re.sub(r'\b\d{4,6}\b',         ' OTP_NUMBER ',       text)
+    text = re.sub(r'[^\w\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 def is_conversational(text: str) -> bool:
     words = text.split()
@@ -133,26 +135,52 @@ def is_conversational(text: str) -> bool:
 # PREDICTION
 # ─────────────────────────────────────────────
 def predict(raw_message: str) -> dict:
-    processed  = preprocess(raw_message)
-    vec        = vectorizer.transform([processed])
-    p_lr       = lr.predict_proba(vec)[0][1]
-    p_nb       = nb.predict_proba(vec)[0][1]
-    p_svm      = svm.predict_proba(vec)[0][1]
-    w_svm, w_lr, w_nb = weights
-    fraud_prob = w_svm*p_svm + w_lr*p_lr + w_nb*p_nb
-    if is_conversational(raw_message) and fraud_prob < 0.35:
-        fraud_prob = 0.05
-    legit_prob = 1.0 - fraud_prob
-    if   fraud_prob >= 0.85: risk, pred, thresh = "FRAUD",      1, 0.85
-    elif fraud_prob >= 0.45: risk, pred, thresh = "SUSPICIOUS",  1, 0.45
-    elif fraud_prob >= 0.30: risk, pred, thresh = "UNCERTAIN",   0, 0.30
-    else:                    risk, pred, thresh = "LEGIT",       0, 0.30
-    return {"prediction": pred,
-            "fraud_probability": round(float(fraud_prob), 4),
-            "legit_probability": round(float(legit_prob), 4),
-            "risk_level": risk, "threshold_used": thresh,
-            "processed_text": processed}
+    processed = preprocess(raw_message)
+    vec = vectorizer.transform([processed])
 
+    p_lr = lr.predict_proba(vec)[0][1]
+    p_nb = nb.predict_proba(vec)[0][1]
+    p_svm = svm.predict_proba(vec)[0][1]
+
+    # weighted ensemble
+    w_svm, w_lr, w_nb = weights
+    fraud_prob = w_svm * p_svm + w_lr * p_lr + w_nb * p_nb
+
+    # conversational override
+    if is_conversational(raw_message) and fraud_prob < 0.50:
+        fraud_prob = 0.05
+
+    legit_prob = 1.0 - fraud_prob
+
+    # final thresholds
+    if fraud_prob >= 0.90:
+        risk = "FRAUD"
+        pred = 1
+        thresh = 0.90
+
+    elif fraud_prob >= 0.70:
+        risk = "SUSPICIOUS"
+        pred = 1
+        thresh = 0.70
+
+    elif fraud_prob >= 0.30:
+        risk = "UNCERTAIN"
+        pred = 0
+        thresh = 0.30
+
+    else:
+        risk = "LEGIT"
+        pred = 0
+        thresh = 0.30
+
+    return {
+        "prediction": pred,
+        "fraud_probability": round(float(fraud_prob), 4),
+        "legit_probability": round(float(legit_prob), 4),
+        "risk_level": risk,
+        "threshold_used": thresh,
+        "processed_text": processed
+    }
 # ─────────────────────────────────────────────
 # FRAUD TYPE CLASSIFIER
 # ─────────────────────────────────────────────
@@ -195,7 +223,7 @@ def classify_fraud_type(processed_text: str) -> dict:
 # ENTITY EXTRACTOR
 # ─────────────────────────────────────────────
 def extract_entities(raw_message: str, sender: str = "") -> dict:
-    phones  = list(set(re.findall(r"\b[6-9]\d{9}\b", raw_message)))
+    phones = list(set(re.findall(r'\b[789]\d{9}\b', raw_message)))
     urls    = list(set(re.findall(
         r"https?://[^\s]+|www\.[^\s]+|[a-zA-Z0-9\-]+\.[a-z]{2,4}/[^\s]*", raw_message)))
     amounts = list(set(re.findall(
@@ -357,7 +385,9 @@ def _reconstruct_data(c: Complaint) -> dict:
     """Rebuild the data dict from a Complaint ORM object for PDF / NCRP helper."""
     fp = c.fraud_probability or 0.0
     ts = c.timestamp.strftime("%d-%m-%Y %H:%M:%S") if c.timestamp else ""
-    thresh = 0.85 if c.risk_level == "FRAUD" else 0.45
+    # Must match thresholds in predict()
+    thresh_map = {"FRAUD": 0.90, "SUSPICIOUS": 0.70, "UNCERTAIN": 0.30, "LEGIT": 0.30}
+    thresh = thresh_map.get(c.risk_level, 0.30)
     return {
         "complaint_id":        c.complaint_id,
         "timestamp":           ts,
@@ -878,8 +908,7 @@ def admin_label():
 def admin_retrain():
     try:
         env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-        env["PYTHONUTF8"]       = "1"
+        env["PYTHONUTF8"] = "1"
         subprocess.Popen(
             ["python", "-X", "utf8", str(BASE_DIR / "pipefinal.py")],
             cwd=str(BASE_DIR),
@@ -887,9 +916,39 @@ def admin_retrain():
             stderr=subprocess.STDOUT,
             env=env,
         )
-        flash("🔄 Retraining started. Check log for progress.", "success")
+        flash("🔄 Retraining started. Check log for progress. "
+              "Click 'Reload Model' once log shows completion.", "success")
     except Exception as e:
         flash(f"❌ Retrain failed: {e}", "error")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/reload-model", methods=["POST"])
+@require_admin
+def reload_model():
+    """
+    Reloads model artifacts from disk into memory after retraining.
+    Must be called after retrain completes — no server restart needed.
+    """
+    global lr, nb, svm, weights, vectorizer
+
+    try:
+        with open(VEC_PATH,   "rb") as f:
+            vectorizer = pickle.load(f)
+        with open(MODEL_PATH, "rb") as f:
+            model_data = pickle.load(f)
+
+        lr      = model_data["lr"]
+        nb      = model_data["nb"]
+        svm     = model_data["svm"]
+        weights = model_data["weights"]
+
+        flash(f"✅ Model reloaded. New weights → "
+              f"SVM={weights[0]}, LR={weights[1]}, NB={weights[2]}", "success")
+
+    except Exception as e:
+        flash(f"❌ Reload failed: {e}", "error")
+
     return redirect(url_for("admin_panel"))
 
 @app.route("/admin/retrain-status")

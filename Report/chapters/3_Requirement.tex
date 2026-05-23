@@ -1,0 +1,109 @@
+\section{Introduction}
+Requirement Engineering is the foundational phase of the software development lifecycle, encompassing the systematic process of gathering, analyzing, documenting, and validating the specifications of the proposed system. For the CyberShield portal, requirements are bifurcated into requirements dealing directly with the machine learning inference pipeline (backend intelligence) and those concerning the interaction logic of the front-end user interfaces (both citizen-facing and admin-facing). Functional requirements define what the system must do; non-functional requirements define how well it must do it.
+
+\section{System Analysis}
+\subsection{Limitations of the Existing System}
+Before designing CyberShield, a thorough analysis of existing generic spam filters and cybercrime complaint mechanisms was conducted. The primary limitations identified were:
+\begin{enumerate}
+    \item \textbf{Binary Rigidity:} Existing text classifiers typically enforce a hard binary output. Messages that are highly ambiguous are frequently misclassified, offering no gradient of risk or uncertainty.
+    \item \textbf{Opaque Decision Making:} Currently, when an email provider routes a message to the "Spam" folder, the user is not informed \textit{why}. This black-box approach breeds user distrust, particularly when false positives occur.
+    \item \textbf{Manual Intelligence Gathering:} Victims of cybercrime must manually copy phone numbers, isolate URLs, and draft complaints from scratch when filing a First Information Report (FIR) on the NCRP portal, a process prone to transcription errors and incomplete artifact capture.
+    \item \textbf{Static Models:} Most commercial off-the-shelf classifiers employ models that decay rapidly. Retraining these models requires extensive data engineering rather than a streamlined Human-in-the-Loop pipeline. Furthermore, retraining cycles in commercial systems are typically quarterly or annual, whereas cybercrime phrasing evolves on a daily basis.
+\end{enumerate}
+
+\subsection{Feasibility Study}
+The feasibility of developing CyberShield was evaluated across three dimensions:
+\begin{itemize}
+    \item \textbf{Technical Feasibility:} The implementation of TF-IDF vectorization and classical ensemble modeling (SVM/LR/NB) on a corpus of 26,500 messages is technically feasible with low computational overhead. The system can easily be hosted on standard cloud infrastructure (e.g., Render, Heroku) using a Python/Flask ecosystem. Thus, the project is technically highly feasible.
+    \item \textbf{Operational Feasibility:} By designing an intuitive citizen-facing interface and an OAuth 2.0 secured Admin panel for HITL adjudication, the system aligns perfectly with the operational workflows of civilian users and cyber-intelligence officers.
+    \item \textbf{Economic Feasibility:} As the project relies entirely on open-source libraries (scikit-learn, ReportLab, Flask) and lightweight SQLite databases, capital expenditure is minimized to server hosting costs alone. Estimated monthly hosting cost on platforms such as Render or Railway is approximately USD 0--7, making the system highly cost-effective for institutional deployment.
+\end{itemize}
+
+
+\section{System Requirements}
+
+\subsection{Hardware Requirements}
+For deployment and continuous active retraining (Hard Negative Mining), the server infrastructure requires specific minimum capabilities to ensure the $25,000$-feature TF-IDF matrix can be processed within RAM without triggering swap space bottlenecks.
+\begin{itemize}
+    \item \textbf{Minimum Client Device (End User):}
+    \begin{itemize}
+        \item Any device with a modern browser (Chrome 90+, Firefox 88+, Safari 14+).
+        \item Minimum 1Mbps internet connection.
+        \item No local computation required --- all inference is server-side.
+    \end{itemize}
+    \item \textbf{Development Environment:}
+    \begin{itemize}
+        \item \textbf{Processor:} Minimum Intel Core i5 or AMD Ryzen 5 (multi-threading heavily utilized during cross-validation).
+        \item \textbf{RAM:} 8 GB minimum; 16 GB recommended for manipulating the 100MB+ master dataset arrays during vectorization.
+        \item \textbf{Storage:} 256 GB SSD for fast I/O read/write operations during model pickling operations.
+    \end{itemize}
+    \item \textbf{Production Server (Minimum):}
+    \begin{itemize}
+        \item \textbf{CPU:} 2 virtual Cores (vCPU).
+        \item \textbf{RAM:} 1 GB (Model inferences are lightweight, taking $<100ms$).
+        \item \textbf{Storage:} 20 GB block storage.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Software Requirements}
+The software stack is uniformly Pythonic, minimizing impedance mismatch between the data science layer and the web server layer.
+\begin{itemize}
+    \item \textbf{Operating System:} Agnostic (Windows 11 during development; Linux/Ubuntu for deployment).
+    \item \textbf{Programming Language:} Python 3.10+ is required specifically for structural pattern matching and improved dictionary ordering used in the threshold routing logic.
+    \item \textbf{Machine Learning Layer:}
+    \begin{itemize}
+        \item \texttt{scikit-learn}: Core algorithm implementations (SVM, Logistic Regression, Naive Bayes, TF-IDF).
+        \item \texttt{pandas / numpy}: Vectorized data frame manipulation and array operations (used exclusively in the offline \texttt{pipefinal.py} training pipeline, not in the runtime web server).
+        \item \texttt{joblib}: Fast disk-caching and efficient binary serialization of trained model objects.
+    \end{itemize}
+    \item \textbf{Web Framework \& Backend:}
+    \begin{itemize}
+        \item \texttt{Flask}: Micro-framework handling HTTP routing and Jinja2 templating.
+        \item \texttt{flask-dance}: Implementation of secure Google OAuth 2.0 authentication.
+    \end{itemize}
+    \item \textbf{Database \& Session Layer:}
+    \begin{itemize}
+        \item \texttt{Flask-SQLAlchemy} \& \texttt{psycopg2-binary}: ORM mapping and thread-safe database connection pooling.
+        \item \texttt{Flask-Migrate}: Handling database schema migrations.
+        \item \texttt{Flask-Login}: User session management.
+    \end{itemize}
+    \item \textbf{Artifact Generation:}
+    \begin{itemize}
+        \item \texttt{ReportLab}: Programmatic generation of the NCRP-compliant PDF utilizing Canvas draw operations.
+    \end{itemize}
+\end{itemize}
+
+
+\section{Functional Requirements}
+Functional requirements define the core behavior, inputs, outputs, and specific computational tasks the system must perform.
+\begin{enumerate}
+    \item \textbf{Message Ingestion \& Parsing:} The system must permit users to paste text up to 800 characters (enforced at the HTML frontend layer via the \texttt{maxlength} attribute, not the server-side backend) and systematically strip whitespace and non-printable characters.
+    \item \textbf{Artifact Extraction:} The system must execute RegEx pipelines to extract and isolate all URLs (http/https/www) and 10+ digit numerical vectors resembling phone numbers.
+    \item \textbf{Probabilistic Scoring:} The system must compute a soft-voting probability matrix against the text string using ensemble weights determined via grid search over the validation set, with the empirically optimal values for the current training run being (SVM=0.50, LR=0.20, NB=0.30) and classify it into bounds: 
+    \begin{itemize}
+        \item FRAUD: $P(\text{Fraud}) \geq 0.90$
+        \item SUSPICIOUS: $0.70 \leq P(\text{Fraud}) < 0.90$
+        \item UNCERTAIN: $0.30 \leq P(\text{Fraud}) < 0.70$
+        \item LEGIT: $P(\text{Fraud}) < 0.30$
+    \end{itemize}
+    \item \textbf{Word Risk Heatmap:} The system must map coefficients from the underlying Logistic Regression model back to the input string tokens, coloring them by severity to explain the prediction.
+    \item \textbf{Velocity Intelligence:} The system must update a global datastore incrementing the occurrence count of extracted phone numbers/URLs, flagging them as MED/HIGH/CRITICAL based on frequency.
+    \item \textbf{NCRP Document Generation:} The system must dynamically render a PDF embedding the extracted artifacts, risk level, raw text, and a generated NCRP Complaint Category Code.
+    \item \textbf{HITL Administrative Annotation:} The system must securely present \textit{UNCERTAIN} anomalies to an OAuth-authenticated admin for manual binary labeling. The admin interface must display the raw message, extracted artifacts, and the model's probability score alongside the labeling controls to provide sufficient context for accurate human adjudication.
+    \item \textbf{Automated Subprocess Retraining:} The admin panel must possess a trigger to launch an asynchronous subprocess that merges new HITL labels, extracts hard negatives, and retrains the entire mathematical model from scratch, subsequently overwriting the pickled artifacts. The retraining subprocess must preserve the frozen test set indices from \texttt{split\_indices.pkl} to prevent contamination of the evaluation partition. After retraining completes, the admin can reload model weights into RAM via the \texttt{/admin/reload-model} route without restarting the Flask server.
+    \item \textbf{Colloquial Override:} The system must suppress false positives on standard conversational phrases by applying a deterministic override that forces $P(\text{Fraud}) = 0.05$ when the input matches a predefined conversational dictionary and the raw ensemble probability is below $0.50$.
+    \item \textbf{Authentication Requirement:} Google OAuth authentication is required before a user can submit a message for analysis.
+    \item \textbf{User Dashboard:} Registered users must be able to access a complaint history dashboard.
+    \item \textbf{Role Management:} Admins must be able to manage user roles (promote/demote) via a dedicated user management panel.
+\end{enumerate}
+
+
+\section{Non-Functional Requirements}
+Non-functional requirements dictate the operational constraints, performance, scaling, and holistic attributes of the system.
+\begin{enumerate}
+    \item \textbf{Inference Latency:} Real-time analysis of a 500-character string (including vectorization, predict\_proba calls, and regex artifact extraction) must not exceed $500$ milliseconds under normal load. This threshold aligns with established UX research indicating that response times under 500ms are perceived as immediate by users, preventing abandonment of the reporting interface.
+    \item \textbf{Security \& Authentication:} Administrative routes (retraining, velocity DB access, HITL labeling) must be strictly gated behind Google OAuth 2.0, utilizing secure, HttpOnly session cookies.
+    \item \textbf{Idempotency of the Test Set:} The system's retraining module must strictly utilize a frozen \texttt{split\_indices.pkl} list to guarantee that the 3,980 evaluation instances remain completely uncontaminated by new HITL data, ensuring consistent scientific reproducibility of the ROC-AUC and F1 metrics.
+    \item \textbf{Aesthetics and UX:} The citizen-facing frontend must utilize responsive, accessible, dark-themed (glassmorphic) interfaces that do not intimidate victims of cybercrime.
+    \item \textbf{Concurrent Access:} The system must handle at least 10 simultaneous citizen inference requests without degradation in response time, achieved through SQLAlchemy's connection pool for thread-safe database operations, replacing previous raw SQLite3 WAL approaches.
+\end{enumerate}
