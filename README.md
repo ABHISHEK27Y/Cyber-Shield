@@ -227,6 +227,8 @@ Heatmap:        "kyc", "blocked", "verify", "aadhaar" highlighted RED
 - Deduplication: exact duplicate removal
 
 > **Why this matters:** Most student projects use the standard UCI SMS dataset (5,574 rows, English only). Our dataset is **5× larger** and India-focused with real smishing patterns.
+>
+> **Note on Datasets:** The raw training CSV/TXT datasets are omitted from this GitHub repository to reduce bloat. However, the pre-trained model artifacts (`final_models.pkl`, `final_vectorizer.pkl`) are included, ensuring the application and ML inference work perfectly out-of-the-box!
 
 ---
 
@@ -325,8 +327,8 @@ All three models retrained. **Vectorizer NOT re-fit.**
 
 ### Step 1 — Clone Repository
 ```bash
-git clone https://github.com/ABHISHEK27Y/CyberShield
-cd CyberShield
+git clone https://github.com/ABHISHEK27Y/Cyber-Shield
+cd Cyber-Shield
 ```
 
 ### Step 2 — Install Dependencies
